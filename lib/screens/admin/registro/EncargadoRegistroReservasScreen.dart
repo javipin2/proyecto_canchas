@@ -11,16 +11,17 @@ import '../../../../models/cancha.dart';
 import '../../../../models/horario.dart';
 import '../../../../providers/cancha_provider.dart';
 
-class AdminRegistroReservasScreen extends StatefulWidget {
-  const AdminRegistroReservasScreen({super.key});
+class EncargadoRegistroReservasScreen extends StatefulWidget {
+  const EncargadoRegistroReservasScreen({super.key});
 
   @override
-  AdminRegistroReservasScreenState createState() =>
-      AdminRegistroReservasScreenState();
+  EncargadoRegistroReservasScreenState createState() =>
+      EncargadoRegistroReservasScreenState();
 }
 
-class AdminRegistroReservasScreenState
-    extends State<AdminRegistroReservasScreen> with TickerProviderStateMixin {
+class EncargadoRegistroReservasScreenState
+    extends State<EncargadoRegistroReservasScreen>
+    with TickerProviderStateMixin {
   List<Reserva> _reservas = [];
   DateTime? _selectedDate;
   String? _selectedSede;
@@ -261,110 +262,17 @@ class AdminRegistroReservasScreenState
     _loadReservas();
   }
 
-  Future<void> _editReserva(Reserva reserva) async {
-    TextEditingController nombreController =
-        TextEditingController(text: reserva.nombre ?? '');
-    TextEditingController telefonoController =
-        TextEditingController(text: reserva.telefono ?? '');
-    TextEditingController emailController =
-        TextEditingController(text: reserva.email ?? '');
-    bool confirmada = reserva.confirmada;
-
-    await showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Editar Reserva', style: GoogleFonts.montserrat()),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: nombreController,
-                decoration: InputDecoration(labelText: 'Nombre'),
-              ),
-              TextField(
-                controller: telefonoController,
-                decoration: InputDecoration(labelText: 'Teléfono'),
-                keyboardType: TextInputType.phone,
-              ),
-              TextField(
-                controller: emailController,
-                decoration: InputDecoration(labelText: 'Correo'),
-                keyboardType: TextInputType.emailAddress,
-              ),
-              SwitchListTile(
-                title: Text('Confirmada', style: GoogleFonts.montserrat()),
-                value: confirmada,
-                onChanged: (value) {
-                  setState(() {
-                    confirmada = value;
-                  });
-                },
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text('Cancelar', style: GoogleFonts.montserrat()),
-          ),
-          TextButton(
-            onPressed: () async {
-              try {
-                await FirebaseFirestore.instance
-                    .collection('reservas')
-                    .doc(reserva.id)
-                    .update({
-                  'nombre': nombreController.text.trim(),
-                  'telefono': telefonoController.text.trim(),
-                  'correo': emailController.text.trim(),
-                  'confirmada': confirmada,
-                });
-                _loadReservas();
-                Navigator.pop(context);
-              } catch (e) {
-                _showErrorSnackBar('Error al editar reserva: $e');
-              }
-            },
-            child: Text('Guardar', style: GoogleFonts.montserrat()),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _deleteReserva(String reservaId) async {
-    bool confirm = await showDialog(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: Text('Eliminar Reserva', style: GoogleFonts.montserrat()),
-            content: Text('¿Estás seguro de eliminar esta reserva?',
-                style: GoogleFonts.montserrat()),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: Text('Cancelar', style: GoogleFonts.montserrat()),
-              ),
-              TextButton(
-                onPressed: () => Navigator.pop(context, true),
-                child: Text('Eliminar', style: GoogleFonts.montserrat()),
-              ),
-            ],
-          ),
-        ) ??
-        false;
-
-    if (confirm) {
-      try {
-        await FirebaseFirestore.instance
-            .collection('reservas')
-            .doc(reservaId)
-            .delete();
-        _loadReservas();
-      } catch (e) {
-        _showErrorSnackBar('Error al eliminar reserva: $e');
-      }
+  Future<void> _confirmarReserva(Reserva reserva, bool confirmar) async {
+    try {
+      await FirebaseFirestore.instance
+          .collection('reservas')
+          .doc(reserva.id)
+          .update({'confirmada': confirmar});
+      _loadReservas();
+      _showErrorSnackBar(
+          'Reserva ${confirmar ? 'confirmada' : 'rechazada'} con éxito');
+    } catch (e) {
+      _showErrorSnackBar('Error al actualizar reserva: $e');
     }
   }
 
@@ -373,7 +281,7 @@ class AdminRegistroReservasScreenState
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          'Registro de Reservas',
+          'Registro de Reservas (Encargado)',
           style: GoogleFonts.montserrat(
             fontWeight: FontWeight.w600,
           ),
@@ -677,28 +585,23 @@ class AdminRegistroReservasScreenState
                   ),
                 )),
                 DataCell(Text(
-                  reserva.confirmada
-                      ? 'Sí'
-                      : reserva.confirmada == false
-                          ? 'No'
-                          : 'Indefinido',
+                  reserva.confirmada ? 'Sí' : 'No',
                   style: TextStyle(
-                    color: reserva.confirmada
-                        ? _reservedColor
-                        : reserva.confirmada == false
-                            ? Colors.redAccent
-                            : _disabledColor,
+                    color:
+                        reserva.confirmada ? _reservedColor : Colors.redAccent,
                   ),
                 )),
                 DataCell(Row(
                   children: [
                     IconButton(
-                      icon: Icon(Icons.edit, color: _secondaryColor),
-                      onPressed: () => _editReserva(reserva),
+                      icon: Icon(Icons.check_circle, color: _reservedColor),
+                      onPressed: () => _confirmarReserva(reserva, true),
+                      tooltip: 'Confirmar',
                     ),
                     IconButton(
-                      icon: Icon(Icons.delete, color: Colors.redAccent),
-                      onPressed: () => _deleteReserva(reserva.id),
+                      icon: Icon(Icons.cancel, color: Colors.redAccent),
+                      onPressed: () => _confirmarReserva(reserva, false),
+                      tooltip: 'Rechazar',
                     ),
                   ],
                 )),
@@ -799,14 +702,12 @@ class AdminRegistroReservasScreenState
                     ),
                   ),
                   Text(
-                    'Confirmada: ${reserva.confirmada ? 'Sí' : reserva.confirmada == false ? 'No' : 'Indefinido'}',
+                    'Confirmada: ${reserva.confirmada ? 'Sí' : 'No'}',
                     style: GoogleFonts.montserrat(
                       fontSize: 14,
                       color: reserva.confirmada
                           ? _reservedColor
-                          : reserva.confirmada == false
-                              ? Colors.redAccent
-                              : _disabledColor,
+                          : Colors.redAccent,
                     ),
                   ),
                 ],
@@ -815,12 +716,15 @@ class AdminRegistroReservasScreenState
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   IconButton(
-                    icon: Icon(Icons.edit, color: _secondaryColor),
-                    onPressed: () => _editReserva(reserva),
+                    icon: Icon(Icons.check_circle, color: _reservedColor),
+                    onPressed: () => _confirmarReserva(reserva, true),
+                    tooltip: 'Confirmar',
                   ),
                   IconButton(
-                    icon: Icon(Icons.delete, color: Colors.redAccent),
-                    onPressed: () => _deleteReserva(reserva.id),
+                    icon: Icon(Icons.cancel,
+                        color: const Color.fromARGB(255, 245, 62, 62)),
+                    onPressed: () => _confirmarReserva(reserva, false),
+                    tooltip: 'Rechazar',
                   ),
                 ],
               ),

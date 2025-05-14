@@ -7,6 +7,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../../models/cancha.dart';
 import '../../../models/horario.dart';
 import '../../../models/reserva.dart';
+import '../../../models/cliente.dart'; // Asegúrate de importar el nuevo modelo
 
 class AgregarReservaScreen extends StatefulWidget {
   final DateTime fecha;
@@ -35,6 +36,7 @@ class _AgregarReservaScreenState extends State<AgregarReservaScreen>
   late TextEditingController _valorController;
   TipoAbono? _selectedTipo;
   bool _isProcessing = false;
+  String? _selectedClienteId; // Para almacenar el ID del cliente seleccionado
 
   // Controladores para animaciones
   late AnimationController _fadeController;
@@ -140,6 +142,24 @@ class _AgregarReservaScreenState extends State<AgregarReservaScreen>
     }
   }
 
+  void _seleccionarCliente(Cliente? cliente) {
+    if (cliente != null) {
+      setState(() {
+        _selectedClienteId = cliente.id;
+        _nombreController.text = cliente.nombre;
+        _telefonoController.text = cliente.telefono;
+        _emailController.text = cliente.correo ?? ''; // Manejo de nulo
+      });
+    } else {
+      setState(() {
+        _selectedClienteId = null;
+        _nombreController.clear();
+        _telefonoController.clear();
+        _emailController.clear();
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -181,6 +201,15 @@ class _AgregarReservaScreenState extends State<AgregarReservaScreen>
                 )
               : ListView(
                   children: [
+                    _buildClienteSelectorCard()
+                        .animate()
+                        .fadeIn(duration: 600.ms, curve: Curves.easeOutQuad)
+                        .slideY(
+                            begin: -0.2,
+                            end: 0,
+                            duration: 600.ms,
+                            curve: Curves.easeOutQuad),
+                    const SizedBox(height: 16),
                     _buildInfoCard()
                         .animate()
                         .fadeIn(duration: 600.ms, curve: Curves.easeOutQuad)
@@ -205,6 +234,113 @@ class _AgregarReservaScreenState extends State<AgregarReservaScreen>
                         ),
                   ],
                 ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildClienteSelectorCard() {
+    return Card(
+      elevation: 0,
+      color: _cardColor,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Seleccionar Cliente Registrado (Opcional)',
+              style: GoogleFonts.montserrat(
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+                color: _primaryColor,
+              ),
+            ),
+            const SizedBox(height: 12),
+            StreamBuilder<QuerySnapshot>(
+              stream:
+                  FirebaseFirestore.instance.collection('clientes').snapshots(),
+              builder: (context, snapshot) {
+                if (snapshot.hasError) {
+                  return Text(
+                    'Error al cargar clientes: ${snapshot.error}',
+                    style: GoogleFonts.montserrat(color: Colors.redAccent),
+                  );
+                }
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return Center(
+                    child: CircularProgressIndicator(
+                      valueColor:
+                          AlwaysStoppedAnimation<Color>(_secondaryColor),
+                    ),
+                  );
+                }
+                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                  return Text(
+                    'No hay clientes registrados.',
+                    style: GoogleFonts.montserrat(color: _primaryColor),
+                  );
+                }
+                final clientes = snapshot.data!.docs
+                    .map((doc) => Cliente.fromFirestore(doc))
+                    .toList();
+                return DropdownButtonFormField<String>(
+                  decoration: InputDecoration(
+                    labelText: 'Seleccionar Cliente',
+                    labelStyle: GoogleFonts.montserrat(
+                      color: _primaryColor.withOpacity(0.6),
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide(color: _disabledColor),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide(color: _disabledColor),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide(color: _secondaryColor),
+                    ),
+                  ),
+                  value: _selectedClienteId,
+                  hint: Text(
+                    'Selecciona un cliente',
+                    style: GoogleFonts.montserrat(color: _primaryColor),
+                  ),
+                  items: [
+                    DropdownMenuItem<String>(
+                      value: null,
+                      child: Text(
+                        'Ninguno (Ingresar manualmente)',
+                        style: GoogleFonts.montserrat(),
+                      ),
+                    ),
+                    ...clientes.map((cliente) => DropdownMenuItem<String>(
+                          value: cliente.id,
+                          child: Text(
+                            cliente.nombre,
+                            style: GoogleFonts.montserrat(),
+                          ),
+                        )),
+                  ],
+                  onChanged: (value) {
+                    final selectedCliente = clientes.firstWhere(
+                      (cliente) => cliente.id == value,
+                      orElse: () => Cliente(
+                          id: '', nombre: '', telefono: '', correo: null),
+                    );
+                    _seleccionarCliente(
+                        selectedCliente.id.isEmpty ? null : selectedCliente);
+                  },
+                  icon: Icon(Icons.keyboard_arrow_down, color: _secondaryColor),
+                );
+              },
+            ),
+          ],
         ),
       ),
     );
@@ -396,7 +532,7 @@ class _AgregarReservaScreenState extends State<AgregarReservaScreen>
                 keyboardType: TextInputType.emailAddress,
                 validator: (value) {
                   if (value == null || value.trim().isEmpty) {
-                    return 'Ingresa el correo';
+                    return null; // Correo es opcional
                   }
                   if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$')
                       .hasMatch(value)) {

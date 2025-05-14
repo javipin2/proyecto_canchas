@@ -1,8 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'editar_cancha_screen.dart';
 import 'registrar_cancha_screen.dart';
 import '../admin_dashboard_screen.dart';
@@ -14,33 +12,12 @@ class CanchasScreen extends StatefulWidget {
   CanchasScreenState createState() => CanchasScreenState();
 }
 
-class CanchasScreenState extends State<CanchasScreen>
-    with TickerProviderStateMixin {
+class CanchasScreenState extends State<CanchasScreen> {
   String _selectedSede = "";
-  late AnimationController _fadeController;
-
   final Color _primaryColor = const Color(0xFF3C4043);
   final Color _secondaryColor = const Color(0xFF4285F4);
   final Color _backgroundColor = Colors.white;
   final Color _cardColor = const Color(0xFFF8F9FA);
-
-  @override
-  void initState() {
-    super.initState();
-    _fadeController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 800),
-    );
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _fadeController.forward();
-    });
-  }
-
-  @override
-  void dispose() {
-    _fadeController.dispose();
-    super.dispose();
-  }
 
   Query _buildQuery() {
     Query query = FirebaseFirestore.instance.collection('canchas');
@@ -54,52 +31,41 @@ class CanchasScreenState extends State<CanchasScreen>
     bool? confirm = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
-      builder: (_) => Animate(
-        effects: [
-          FadeEffect(duration: const Duration(milliseconds: 300)),
-          ScaleEffect(
-            begin: const Offset(0.95, 0.95),
-            end: const Offset(1.0, 1.0),
-            duration: const Duration(milliseconds: 300),
-          ),
-        ],
-        child: AlertDialog(
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: Row(
-            children: [
-              Icon(Icons.warning, color: Colors.redAccent),
-              const SizedBox(width: 8),
-              Text(
-                'Confirmar eliminación',
-                style: GoogleFonts.montserrat(
-                  fontWeight: FontWeight.w600,
-                  color: _primaryColor,
-                ),
-              ),
-            ],
-          ),
-          content: Text(
-            '¿Deseas eliminar esta cancha?',
-            style: GoogleFonts.montserrat(color: _primaryColor),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: Text(
-                'Cancelar',
-                style: GoogleFonts.montserrat(color: _secondaryColor),
-              ),
-            ),
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: Text(
-                'Eliminar',
-                style: GoogleFonts.montserrat(color: Colors.redAccent),
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            const Icon(Icons.warning, color: Colors.redAccent),
+            const SizedBox(width: 8),
+            Text(
+              'Confirmar eliminación',
+              style: GoogleFonts.montserrat(
+                fontWeight: FontWeight.w600,
+                color: _primaryColor,
               ),
             ),
           ],
         ),
+        content: Text(
+          '¿Deseas eliminar esta cancha?',
+          style: GoogleFonts.montserrat(color: _primaryColor),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text(
+              'Cancelar',
+              style: GoogleFonts.montserrat(color: _secondaryColor),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text(
+              'Eliminar',
+              style: GoogleFonts.montserrat(color: Colors.redAccent),
+            ),
+          ),
+        ],
       ),
     );
 
@@ -195,157 +161,197 @@ class CanchasScreenState extends State<CanchasScreen>
                       color: _primaryColor,
                     ),
                   ),
-                  Animate(
-                    effects: [
-                      FadeEffect(duration: const Duration(milliseconds: 600)),
-                      SlideEffect(
-                        begin: const Offset(0, -0.2),
-                        end: Offset.zero,
-                        duration: const Duration(milliseconds: 600),
+                  ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (context) =>
+                                const RegistrarCanchaScreen()),
+                      );
+                    },
+                    icon: Icon(Icons.add_circle_outline,
+                        color: Colors.white, size: 20 * textScale),
+                    label: Text(
+                      'Nueva Cancha',
+                      style: GoogleFonts.montserrat(
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                        fontSize: 16 * textScale,
                       ),
-                    ],
-                    child: ElevatedButton.icon(
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                              builder: (context) =>
-                                  const RegistrarCanchaScreen()),
-                        );
-                      },
-                      icon: Icon(Icons.add_circle_outline,
-                          color: Colors.white, size: 20 * textScale),
-                      label: Text(
-                        'Nueva Cancha',
-                        style: GoogleFonts.montserrat(
-                          fontWeight: FontWeight.w600,
-                          color: Colors.white,
-                          fontSize: 16 * textScale,
-                        ),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: _secondaryColor,
-                        padding: EdgeInsets.symmetric(
-                            horizontal: 20 * textScale,
-                            vertical: 12 * textScale),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12)),
-                        elevation: 3,
-                        minimumSize: Size(
-                            isDesktop ? 300 : double.infinity, 50 * textScale),
-                      ),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _secondaryColor,
+                      padding: EdgeInsets.symmetric(
+                          horizontal: 20 * textScale, vertical: 12 * textScale),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                      elevation: 3,
                     ),
                   ),
                 ],
               ),
               SizedBox(height: paddingScale),
-              Animate(
-                effects: [
-                  FadeEffect(duration: const Duration(milliseconds: 600)),
-                  SlideEffect(
-                    begin: const Offset(0, 0.2),
-                    end: Offset.zero,
-                    duration: const Duration(milliseconds: 600),
-                  ),
-                ],
-                child: Card(
-                  elevation: 2,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    side: BorderSide(color: _cardColor),
-                  ),
-                  color: _cardColor,
-                  child: Padding(
-                    padding: EdgeInsets.all(paddingScale),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Filtros',
-                          style: GoogleFonts.montserrat(
-                            fontSize: 18 * textScale,
-                            fontWeight: FontWeight.w600,
-                            color: _primaryColor,
-                          ),
+              Card(
+                elevation: 2,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  side: BorderSide(color: _cardColor),
+                ),
+                color: _cardColor,
+                child: Padding(
+                  padding: EdgeInsets.all(paddingScale),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Filtros',
+                        style: GoogleFonts.montserrat(
+                          fontSize: 18 * textScale,
+                          fontWeight: FontWeight.w600,
+                          color: _primaryColor,
                         ),
-                        SizedBox(height: paddingScale),
-                        StreamBuilder<QuerySnapshot>(
-                          stream: FirebaseFirestore.instance
-                              .collection('sedes')
-                              .snapshots(),
-                          builder: (context, snapshot) {
-                            if (snapshot.hasError) {
-                              return Text(
-                                'Error al cargar sedes',
+                      ),
+                      SizedBox(height: paddingScale),
+                      StreamBuilder<QuerySnapshot>(
+                        stream: FirebaseFirestore.instance
+                            .collection('canchas')
+                            .snapshots(),
+                        builder: (context, snapshot) {
+                          // Depuración
+                          print(
+                              'Estado de conexión (canchas): ${snapshot.connectionState}');
+                          print('Tiene datos: ${snapshot.hasData}');
+                          print(
+                              'Número de documentos: ${snapshot.data?.docs.length}');
+                          if (snapshot.hasError) {
+                            return Padding(
+                              padding: EdgeInsets.all(paddingScale),
+                              child: Text(
+                                'Error al cargar datos: ${snapshot.error}',
                                 style: GoogleFonts.montserrat(
-                                    color: Colors.redAccent),
-                              );
-                            }
-                            if (snapshot.connectionState ==
-                                ConnectionState.waiting) {
-                              return CircularProgressIndicator(
+                                  color: Colors.redAccent,
+                                  fontSize: 14 * textScale,
+                                ),
+                              ),
+                            );
+                          }
+                          if (snapshot.connectionState ==
+                              ConnectionState.waiting) {
+                            return Center(
+                              child: CircularProgressIndicator(
                                 valueColor: AlwaysStoppedAnimation<Color>(
                                     _secondaryColor),
-                              );
-                            }
-                            final sedeDocs = snapshot.data!.docs;
-                            final sedes = [
-                              'Todas las sedes',
-                              ...sedeDocs.map((doc) => doc['nombre'] as String)
-                            ];
-                            return DropdownButtonFormField<String>(
-                              decoration: InputDecoration(
-                                labelText: 'Filtrar por Sede',
-                                labelStyle: GoogleFonts.montserrat(
-                                    color: _primaryColor),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                  borderSide: BorderSide(color: _cardColor),
-                                ),
-                                enabledBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                  borderSide: BorderSide(color: _cardColor),
-                                ),
-                                focusedBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                  borderSide:
-                                      BorderSide(color: _secondaryColor),
-                                ),
-                                filled: true,
-                                fillColor: Colors.white,
-                                contentPadding: EdgeInsets.symmetric(
-                                    horizontal: 16 * textScale,
-                                    vertical: 16 * textScale),
                               ),
-                              value: _selectedSede.isNotEmpty
-                                  ? _selectedSede
-                                  : null,
-                              items: sedes
-                                  .map((sede) => DropdownMenuItem(
-                                        value: sede == 'Todas las sedes'
-                                            ? ''
-                                            : sede,
-                                        child: Text(
-                                          sede,
-                                          style: GoogleFonts.montserrat(
-                                              color: _primaryColor),
-                                        ),
-                                      ))
-                                  .toList(),
-                              onChanged: (value) {
-                                setState(() {
-                                  _selectedSede = value ?? '';
-                                });
-                              },
-                              icon: Icon(Icons.arrow_drop_down,
-                                  color: _primaryColor),
-                              isExpanded: true,
-                              dropdownColor: _backgroundColor,
                             );
-                          },
-                        ),
-                      ],
-                    ),
+                          }
+                          if (!snapshot.hasData ||
+                              snapshot.data!.docs.isEmpty) {
+                            return Padding(
+                              padding: EdgeInsets.all(paddingScale),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'No hay canchas disponibles',
+                                    style: GoogleFonts.montserrat(
+                                      color: _primaryColor,
+                                      fontSize: 14 * textScale,
+                                    ),
+                                  ),
+                                  Text(
+                                    'Por favor, agrega canchas en Firestore.',
+                                    style: GoogleFonts.montserrat(
+                                      color: _primaryColor.withOpacity(0.7),
+                                      fontSize: 12 * textScale,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }
+                          // Extraer valores únicos del campo 'sede' desde 'canchas'
+                          final canchaDocs = snapshot.data!.docs;
+                          final sedesSet = <String>{};
+                          for (var doc in canchaDocs) {
+                            final data =
+                                doc.data() as Map<String, dynamic>? ?? {};
+                            final sede = data['sede']?.toString();
+                            if (sede != null && sede.isNotEmpty) {
+                              sedesSet.add(sede);
+                            }
+                          }
+                          final sedes = [
+                            'Todas las sedes',
+                            ...sedesSet.toList()..sort(),
+                          ];
+                          if (sedes.length == 1) {
+                            return Padding(
+                              padding: EdgeInsets.all(paddingScale),
+                              child: Text(
+                                'No hay sedes válidas en las canchas. Revisa los datos en Firestore.',
+                                style: GoogleFonts.montserrat(
+                                  color: Colors.redAccent,
+                                  fontSize: 14 * textScale,
+                                ),
+                              ),
+                            );
+                          }
+                          return DropdownButtonFormField<String>(
+                            decoration: InputDecoration(
+                              labelText: 'Filtrar por Sede',
+                              labelStyle:
+                                  GoogleFonts.montserrat(color: _primaryColor),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: BorderSide(color: _cardColor),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: BorderSide(color: _cardColor),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: BorderSide(color: _secondaryColor),
+                              ),
+                              filled: true,
+                              fillColor: Colors.white,
+                              contentPadding: EdgeInsets.symmetric(
+                                  horizontal: 16 * textScale,
+                                  vertical: 16 * textScale),
+                            ),
+                            value:
+                                _selectedSede.isNotEmpty ? _selectedSede : null,
+                            hint: Text(
+                              'Selecciona una sede',
+                              style:
+                                  GoogleFonts.montserrat(color: _primaryColor),
+                            ),
+                            items: sedes
+                                .map((sede) => DropdownMenuItem(
+                                      value:
+                                          sede == 'Todas las sedes' ? '' : sede,
+                                      child: Text(
+                                        sede,
+                                        style: GoogleFonts.montserrat(
+                                            color: _primaryColor),
+                                      ),
+                                    ))
+                                .toList(),
+                            onChanged: (value) {
+                              setState(() {
+                                _selectedSede = value ?? '';
+                                print('Sede seleccionada: $_selectedSede');
+                              });
+                            },
+                            icon: Icon(Icons.arrow_drop_down,
+                                color: _primaryColor),
+                            isExpanded: true,
+                            dropdownColor: _backgroundColor,
+                          );
+                        },
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -381,8 +387,7 @@ class CanchasScreenState extends State<CanchasScreen>
                         ),
                       );
                     }
-                    final canchaDocs = snapshot.data!.docs;
-                    if (canchaDocs.isEmpty) {
+                    if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
                       return Center(
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
@@ -410,6 +415,7 @@ class CanchasScreenState extends State<CanchasScreen>
                         ),
                       );
                     }
+                    final canchaDocs = snapshot.data!.docs;
                     return LayoutBuilder(
                       builder: (context, constraints) {
                         return (isDesktop || isTablet)
@@ -444,7 +450,7 @@ class CanchasScreenState extends State<CanchasScreen>
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: ConstrainedBox(
-          constraints: BoxConstraints(maxWidth: maxWidth),
+          constraints: BoxConstraints(minWidth: maxWidth),
           child: DataTable(
             columnSpacing: 8,
             headingRowHeight: 56 * textScale,
@@ -501,7 +507,7 @@ class CanchasScreenState extends State<CanchasScreen>
             rows: canchaDocs.asMap().entries.map((entry) {
               final index = entry.key;
               final doc = entry.value;
-              final data = doc.data() as Map<String, dynamic>;
+              final data = doc.data() as Map<String, dynamic>? ?? {};
               return DataRow(
                 color: MaterialStateProperty.resolveWith<Color>(
                   (Set<MaterialState> states) {
@@ -522,7 +528,7 @@ class CanchasScreenState extends State<CanchasScreen>
                     SizedBox(
                       width: maxColumnWidth,
                       child: Text(
-                        data['nombre'] ?? '',
+                        data['nombre']?.toString() ?? 'N/A',
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
@@ -540,7 +546,7 @@ class CanchasScreenState extends State<CanchasScreen>
                               color: _secondaryColor.withOpacity(0.2)),
                         ),
                         child: Text(
-                          data['sede'] ?? 'N/A',
+                          data['sede']?.toString() ?? 'N/A',
                           overflow: TextOverflow.ellipsis,
                           style: GoogleFonts.montserrat(
                             color: _secondaryColor,
@@ -554,7 +560,7 @@ class CanchasScreenState extends State<CanchasScreen>
                     SizedBox(
                       width: maxColumnWidth,
                       child: Text(
-                        data['descripcion'] ?? '',
+                        data['descripcion']?.toString() ?? 'N/A',
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
@@ -572,7 +578,7 @@ class CanchasScreenState extends State<CanchasScreen>
                               Border.all(color: Colors.green.withOpacity(0.2)),
                         ),
                         child: Text(
-                          '\$${data['precio']?.toString() ?? ''}',
+                          '\$${data['precio']?.toString() ?? 'N/A'}',
                           overflow: TextOverflow.ellipsis,
                           style: GoogleFonts.montserrat(
                             color: Colors.green[700],
@@ -583,50 +589,42 @@ class CanchasScreenState extends State<CanchasScreen>
                     ),
                   ),
                   DataCell(
-                    Animate(
-                      effects: [
-                        FadeEffect(
-                          delay: Duration(milliseconds: 50 * (index % 10)),
-                          duration: const Duration(milliseconds: 400),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Tooltip(
+                          message: 'Editar cancha',
+                          child: IconButton(
+                            icon: Icon(
+                              Icons.edit,
+                              color: _secondaryColor,
+                              size: 20 * textScale,
+                            ),
+                            onPressed: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => EditarCanchaScreen(
+                                    canchaId: doc.id,
+                                    canchaData: data,
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                        Tooltip(
+                          message: 'Eliminar cancha',
+                          child: IconButton(
+                            icon: Icon(
+                              Icons.delete,
+                              color: Colors.redAccent,
+                              size: 20 * textScale,
+                            ),
+                            onPressed: () => _eliminarCancha(doc.id, context),
+                          ),
                         ),
                       ],
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Tooltip(
-                            message: 'Editar cancha',
-                            child: IconButton(
-                              icon: Icon(
-                                Icons.edit,
-                                color: _secondaryColor,
-                                size: 20 * textScale,
-                              ),
-                              onPressed: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) => EditarCanchaScreen(
-                                      canchaId: doc.id,
-                                      canchaData: data,
-                                    ),
-                                  ),
-                                );
-                              },
-                            ),
-                          ),
-                          Tooltip(
-                            message: 'Eliminar cancha',
-                            child: IconButton(
-                              icon: Icon(
-                                Icons.delete,
-                                color: Colors.redAccent,
-                                size: 20 * textScale,
-                              ),
-                              onPressed: () => _eliminarCancha(doc.id, context),
-                            ),
-                          ),
-                        ],
-                      ),
                     ),
                   ),
                 ],
@@ -644,103 +642,89 @@ class CanchasScreenState extends State<CanchasScreen>
       itemCount: canchaDocs.length,
       itemBuilder: (context, index) {
         final doc = canchaDocs[index];
-        final data = doc.data() as Map<String, dynamic>;
-        return Animate(
-          effects: [
-            FadeEffect(
-              delay: Duration(milliseconds: 50 * (index % 10)),
-              duration: const Duration(milliseconds: 400),
+        final data = doc.data() as Map<String, dynamic>? ?? {};
+        return Card(
+          elevation: 2,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(color: _cardColor),
+          ),
+          color: _cardColor,
+          margin: EdgeInsets.only(bottom: 12 * textScale),
+          child: ListTile(
+            contentPadding: EdgeInsets.all(12 * textScale),
+            title: Text(
+              data['nombre']?.toString() ?? 'N/A',
+              style: GoogleFonts.montserrat(
+                fontSize: 16 * textScale,
+                fontWeight: FontWeight.w600,
+                color: _primaryColor,
+              ),
+              overflow: TextOverflow.ellipsis,
             ),
-            SlideEffect(
-              begin: const Offset(0.05, 0),
-              end: Offset.zero,
-              delay: Duration(milliseconds: 50 * (index % 10)),
-              duration: const Duration(milliseconds: 400),
-            ),
-          ],
-          child: Card(
-            elevation: 2,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-              side: BorderSide(color: _cardColor),
-            ),
-            color: _cardColor,
-            margin: EdgeInsets.only(bottom: 12 * textScale),
-            child: ListTile(
-              contentPadding: EdgeInsets.all(12 * textScale),
-              title: Text(
-                data['nombre'] ?? 'N/A',
-                style: GoogleFonts.montserrat(
-                  fontSize: 16 * textScale,
-                  fontWeight: FontWeight.w600,
-                  color: _primaryColor,
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(height: 4 * textScale),
+                Text(
+                  'Sede: ${data['sede']?.toString() ?? 'N/A'}',
+                  style: GoogleFonts.montserrat(
+                    fontSize: 14 * textScale,
+                    color: _primaryColor.withOpacity(0.8),
+                  ),
+                  overflow: TextOverflow.ellipsis,
                 ),
-                overflow: TextOverflow.ellipsis,
-              ),
-              subtitle: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SizedBox(height: 4 * textScale),
-                  Text(
-                    'Sede: ${data['sede'] ?? 'N/A'}',
-                    style: GoogleFonts.montserrat(
-                      fontSize: 14 * textScale,
-                      color: Color.fromRGBO(60, 64, 67, 0.8),
-                    ),
-                    overflow: TextOverflow.ellipsis,
+                Text(
+                  'Descripción: ${data['descripcion']?.toString() ?? 'N/A'}',
+                  style: GoogleFonts.montserrat(
+                    fontSize: 14 * textScale,
+                    color: _primaryColor.withOpacity(0.8),
                   ),
-                  Text(
-                    'Descripción: ${data['descripcion'] ?? 'N/A'}',
-                    style: GoogleFonts.montserrat(
-                      fontSize: 14 * textScale,
-                      color: Color.fromRGBO(60, 64, 67, 0.8),
-                    ),
-                    overflow: TextOverflow.ellipsis,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                Text(
+                  'Precio: \$${data['precio']?.toString() ?? 'N/A'}',
+                  style: GoogleFonts.montserrat(
+                    fontSize: 14 * textScale,
+                    color: Colors.green[700],
+                    fontWeight: FontWeight.w600,
                   ),
-                  Text(
-                    'Precio: \$${data['precio']?.toString() ?? 'N/A'}',
-                    style: GoogleFonts.montserrat(
-                      fontSize: 14 * textScale,
-                      color: Colors.green[700],
-                      fontWeight: FontWeight.w600,
-                    ),
-                    overflow: TextOverflow.ellipsis,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  icon: Icon(
+                    Icons.edit,
+                    color: _secondaryColor,
+                    size: 20 * textScale,
                   ),
-                ],
-              ),
-              trailing: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  IconButton(
-                    icon: Icon(
-                      Icons.edit,
-                      color: _secondaryColor,
-                      size: 20 * textScale,
-                    ),
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => EditarCanchaScreen(
-                            canchaId: doc.id,
-                            canchaData: data,
-                          ),
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => EditarCanchaScreen(
+                          canchaId: doc.id,
+                          canchaData: data,
                         ),
-                      );
-                    },
-                    tooltip: 'Editar cancha',
+                      ),
+                    );
+                  },
+                  tooltip: 'Editar cancha',
+                ),
+                IconButton(
+                  icon: Icon(
+                    Icons.delete,
+                    color: Colors.redAccent,
+                    size: 20 * textScale,
                   ),
-                  IconButton(
-                    icon: Icon(
-                      Icons.delete,
-                      color: Colors.redAccent,
-                      size: 20 * textScale,
-                    ),
-                    onPressed: () => _eliminarCancha(doc.id, context),
-                    tooltip: 'Eliminar cancha',
-                  ),
-                ],
-              ),
+                  onPressed: () => _eliminarCancha(doc.id, context),
+                  tooltip: 'Eliminar cancha',
+                ),
+              ],
             ),
           ),
         );
