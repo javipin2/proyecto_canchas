@@ -1,10 +1,9 @@
-// lib/screens/reserva_screen.dart
+//reserva_screen cliente
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/services.dart';
 import '../models/reserva.dart';
-import 'dart:ui';
 
 class ReservaScreen extends StatefulWidget {
   final Reserva reserva;
@@ -21,10 +20,12 @@ class _ReservaScreenState extends State<ReservaScreen>
   final _nombreController = TextEditingController();
   final _telefonoController = TextEditingController();
   final _emailController = TextEditingController();
+  final _abonoController = TextEditingController();
   bool _procesando = false;
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideAnimation;
+  double _montoPagado = 0;
 
   @override
   void initState() {
@@ -51,7 +52,9 @@ class _ReservaScreenState extends State<ReservaScreen>
       ),
     );
 
-    // Iniciar la animación cuando se construye la pantalla
+    _montoPagado = widget.reserva.montoPagado;
+    _abonoController.text = _montoPagado.toStringAsFixed(0);
+
     _animationController.forward();
   }
 
@@ -62,23 +65,24 @@ class _ReservaScreenState extends State<ReservaScreen>
         _procesando = true;
       });
 
-      // Pequeña vibración táctil para feedback
       HapticFeedback.mediumImpact();
 
-      // Actualizamos la reserva con los datos ingresados
       widget.reserva.nombre = _nombreController.text;
       widget.reserva.telefono = _telefonoController.text;
       widget.reserva.email = _emailController.text;
+      widget.reserva.montoPagado = _montoPagado;
+      widget.reserva.tipoAbono =
+          _montoPagado >= widget.reserva.montoTotal
+              ? TipoAbono.completo
+              : TipoAbono.parcial;
 
       try {
-        // Guardamos la reserva en Firestore usando el método toFirestore()
         await FirebaseFirestore.instance
             .collection('reservas')
             .add(widget.reserva.toFirestore());
 
         if (!mounted) return;
 
-        // Snackbar mejorado
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Row(
@@ -97,7 +101,6 @@ class _ReservaScreenState extends State<ReservaScreen>
           ),
         );
 
-        // Regresamos a la pantalla inicial (o la que necesites)
         Navigator.popUntil(context, (route) => route.isFirst);
       } catch (e) {
         if (mounted) {
@@ -134,14 +137,15 @@ class _ReservaScreenState extends State<ReservaScreen>
     _nombreController.dispose();
     _telefonoController.dispose();
     _emailController.dispose();
+    _abonoController.dispose();
     _animationController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    // Obtenemos el tema actual
     final theme = Theme.of(context);
+    final currencyFormat = NumberFormat.currency(symbol: "\$", decimalDigits: 0);
 
     return Scaffold(
       backgroundColor: Colors.grey[50],
@@ -179,7 +183,6 @@ class _ReservaScreenState extends State<ReservaScreen>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Tarjeta de resumen de reserva
                   Card(
                     elevation: 4,
                     shadowColor: Colors.black26,
@@ -258,14 +261,27 @@ class _ReservaScreenState extends State<ReservaScreen>
                               ),
                             ],
                           ),
+                          const SizedBox(height: 20),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              _buildInfoItem(
+                                title: 'Precio Total',
+                                value: currencyFormat.format(widget.reserva.montoTotal),
+                                icon: Icons.attach_money,
+                              ),
+                              _buildInfoItem(
+                                title: 'Abono Inicial',
+                                value: currencyFormat.format(widget.reserva.montoPagado),
+                                icon: Icons.payment,
+                              ),
+                            ],
+                          ),
                         ],
                       ),
                     ),
                   ),
-
                   const SizedBox(height: 30),
-
-                  // Título del formulario
                   Text(
                     'Tus datos',
                     style: TextStyle(
@@ -275,10 +291,7 @@ class _ReservaScreenState extends State<ReservaScreen>
                       letterSpacing: 0.5,
                     ),
                   ),
-
                   const SizedBox(height: 20),
-
-                  // Formulario
                   Form(
                     key: _formKey,
                     child: Column(
@@ -315,9 +328,30 @@ class _ReservaScreenState extends State<ReservaScreen>
                             return null;
                           },
                         ),
+                        const SizedBox(height: 20),
+                        _buildTextField(
+                          controller: _abonoController,
+                          label: 'Abono (mínimo 20000)',
+                          icon: Icons.attach_money,
+                          keyboardType: TextInputType.number,
+                          validatorMsg: 'Por favor ingresa un abono',
+                          extraValidation: (value) {
+                            final abono = double.tryParse(value ?? '0') ?? 0;
+                            if (abono < 20000) {
+                              return 'El abono debe ser al menos 20000';
+                            }
+                            if (abono > widget.reserva.montoTotal) {
+                              return 'El abono no puede superar el precio total';
+                            }
+                            return null;
+                          },
+                          onChanged: (value) {
+                            setState(() {
+                              _montoPagado = double.tryParse(value) ?? widget.reserva.montoPagado;
+                            });
+                          },
+                        ),
                         const SizedBox(height: 40),
-
-                        // Botón de confirmación
                         AnimatedContainer(
                           duration: const Duration(milliseconds: 300),
                           width: double.infinity,
@@ -369,7 +403,7 @@ class _ReservaScreenState extends State<ReservaScreen>
                         const SizedBox(height: 20),
                       ],
                     ),
-                  )
+                  ),
                 ],
               ),
             ),
@@ -427,6 +461,7 @@ class _ReservaScreenState extends State<ReservaScreen>
     required TextInputType keyboardType,
     required String validatorMsg,
     String? Function(String?)? extraValidation,
+    void Function(String)? onChanged,
   }) {
     return TextFormField(
       controller: controller,
@@ -462,6 +497,7 @@ class _ReservaScreenState extends State<ReservaScreen>
         fontSize: 16,
       ),
       keyboardType: keyboardType,
+      onChanged: onChanged,
       validator: (value) {
         if (value == null || value.isEmpty) {
           return validatorMsg;

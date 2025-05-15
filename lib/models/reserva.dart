@@ -1,5 +1,4 @@
-// lib/models/reserva.dart
-
+//reserva models
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'cancha.dart';
@@ -9,7 +8,7 @@ import 'package:flutter/material.dart';
 enum TipoAbono { parcial, completo }
 
 class Reserva {
-  String id; // ID de reserva en Firestore
+  String id;
   Cancha cancha;
   DateTime fecha;
   Horario horario;
@@ -20,7 +19,7 @@ class Reserva {
   String? nombre;
   String? telefono;
   String? email;
-  bool confirmada; // Ahora puede modificarse
+  bool confirmada;
 
   Reserva({
     required this.id,
@@ -34,16 +33,15 @@ class Reserva {
     this.nombre,
     this.telefono,
     this.email,
-    this.confirmada = false, // Sigue con valor por defecto, pero ahora editable
+    this.confirmada = false,
   });
 
-  /// **Convertir datos Firestore → Reserva**
   factory Reserva.fromFirestore(DocumentSnapshot doc) {
     Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
 
     return Reserva(
-      id: doc.id, // Firestore genera un ID único
-      cancha: Cancha.fromFirestore(doc), // Se obtiene la cancha asociada
+      id: doc.id,
+      cancha: Cancha.fromFirestore(doc),
       fecha: DateFormat('yyyy-MM-dd').parse(data['fecha']),
       horario: Horario(
           hora: TimeOfDay(
@@ -52,7 +50,7 @@ class Reserva {
       tipoAbono:
           data['estado'] == 'completo' ? TipoAbono.completo : TipoAbono.parcial,
       montoTotal: (data['valor'] ?? 0).toDouble(),
-      montoPagado: 0, // Ajusta esto si Firebase almacena el pago parcial
+      montoPagado: (data['montoPagado'] ?? 0).toDouble(),
       nombre: data['nombre'],
       telefono: data['telefono'],
       email: data['correo'],
@@ -60,17 +58,17 @@ class Reserva {
     );
   }
 
-  /// **Convertir Reserva → Firestore**
   Map<String, dynamic> toFirestore() {
     return {
       'nombre': nombre,
       'telefono': telefono,
       'correo': email,
       'fecha': DateFormat('yyyy-MM-dd').format(fecha),
-      'cancha_id': cancha.id, // Referencia a la cancha
+      'cancha_id': cancha.id,
       'horario': horario.horaFormateada,
-      'estado': tipoAbono == TipoAbono.completo ? 'completo' : 'Pendiente',
+      'estado': tipoAbono == TipoAbono.completo ? 'completo' : 'parcial',
       'valor': montoTotal,
+      'montoPagado': montoPagado,
       'sede': sede,
       'confirmada': confirmada,
       'created_at': Timestamp.now(),

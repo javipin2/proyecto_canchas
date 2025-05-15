@@ -21,6 +21,9 @@ dependencies:
   flutter_staggered_animations: ^1.1.1
   flutter_animate: ^4.3.0  # Para las animaciones
   google_fonts: ^6.1.0    # Para tipografía moderna
+  fl_chart: ^0.67.0
+  pdf: ^3.10.6
+  csv: ^5.1.1
   
 
 

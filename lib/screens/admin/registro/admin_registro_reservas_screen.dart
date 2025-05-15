@@ -107,9 +107,7 @@ class AdminRegistroReservasScreenState
             cancha: cancha,
             fecha: DateFormat('yyyy-MM-dd')
                 .parse(data['fecha'] ?? DateTime.now().toString()),
-            horario: Horario(
-                hora: TimeOfDay(
-                    hour: int.parse(data['horario'].split(':')[0]), minute: 0)),
+            horario: _parseHorario(data['horario'] ?? '12:00 AM'),
             sede: data['sede'] ?? '',
             tipoAbono: data['estado'] == 'completo'
                 ? TipoAbono.completo
@@ -119,7 +117,8 @@ class AdminRegistroReservasScreenState
             nombre: data['nombre'],
             telefono: data['telefono'],
             email: data['correo'],
-            confirmada: data['confirmada'] ?? false,
+            confirmada:
+                data['confirmada'] ?? false, // Manteniendo el valor por defecto
           );
           reservasTemp.add(reserva);
         } catch (e) {
@@ -173,6 +172,7 @@ class AdminRegistroReservasScreenState
   }
 
   void _showErrorSnackBar(String message) {
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
@@ -268,7 +268,7 @@ class AdminRegistroReservasScreenState
         TextEditingController(text: reserva.telefono ?? '');
     TextEditingController emailController =
         TextEditingController(text: reserva.email ?? '');
-    bool confirmada = reserva.confirmada;
+    bool confirmada = reserva.confirmada ?? false;
 
     await showDialog(
       context: context,
@@ -322,6 +322,7 @@ class AdminRegistroReservasScreenState
                   'confirmada': confirmada,
                 });
                 _loadReservas();
+                if (!mounted) return;
                 Navigator.pop(context);
               } catch (e) {
                 _showErrorSnackBar('Error al editar reserva: $e');
@@ -616,6 +617,8 @@ class AdminRegistroReservasScreenState
   }
 
   Widget _buildDataTable() {
+    final currencyFormat =
+        NumberFormat.currency(symbol: "\$", decimalDigits: 0);
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: SingleChildScrollView(
@@ -643,12 +646,20 @@ class AdminRegistroReservasScreenState
             DataColumn(label: Text('Cliente')),
             DataColumn(label: Text('Teléfono')),
             DataColumn(label: Text('Email')),
+            DataColumn(label: Text('Abono')),
+            DataColumn(label: Text('Restante')),
             DataColumn(label: Text('Estado')),
             DataColumn(label: Text('Confirmada')),
             DataColumn(label: Text('Acciones')),
           ],
           rows: _reservas.asMap().entries.map((entry) {
             final reserva = entry.value;
+            final montoRestante = reserva.montoTotal - reserva.montoPagado;
+            final confirmacionText =
+                reserva.confirmada ? 'Sí' : 'No'; // Simplificado
+            final confirmacionColor = reserva.confirmada
+                ? _reservedColor
+                : Colors.redAccent; // Simplificado
             return DataRow(
               cells: [
                 DataCell(
@@ -667,6 +678,17 @@ class AdminRegistroReservasScreenState
                 DataCell(Text(reserva.telefono ?? 'N/A')),
                 DataCell(Text(reserva.email ?? 'N/A')),
                 DataCell(Text(
+                  currencyFormat.format(reserva.montoPagado),
+                  style: TextStyle(color: _reservedColor),
+                )),
+                DataCell(Text(
+                  currencyFormat.format(montoRestante),
+                  style: TextStyle(
+                      color: montoRestante > 0
+                          ? Colors.redAccent
+                          : _reservedColor),
+                )),
+                DataCell(Text(
                   reserva.tipoAbono == TipoAbono.completo
                       ? 'Completo'
                       : 'Parcial',
@@ -677,18 +699,8 @@ class AdminRegistroReservasScreenState
                   ),
                 )),
                 DataCell(Text(
-                  reserva.confirmada
-                      ? 'Sí'
-                      : reserva.confirmada == false
-                          ? 'No'
-                          : 'Indefinido',
-                  style: TextStyle(
-                    color: reserva.confirmada
-                        ? _reservedColor
-                        : reserva.confirmada == false
-                            ? Colors.redAccent
-                            : _disabledColor,
-                  ),
+                  confirmacionText,
+                  style: TextStyle(color: confirmacionColor),
                 )),
                 DataCell(Row(
                   children: [
@@ -711,10 +723,18 @@ class AdminRegistroReservasScreenState
   }
 
   Widget _buildListView() {
+    final currencyFormat =
+        NumberFormat.currency(symbol: "\$", decimalDigits: 0);
     return ListView.builder(
       itemCount: _reservas.length,
       itemBuilder: (context, index) {
         final reserva = _reservas[index];
+        final montoRestante = reserva.montoTotal - reserva.montoPagado;
+        final confirmacionText =
+            reserva.confirmada ? 'Sí' : 'No'; // Simplificado
+        final confirmacionColor = reserva.confirmada
+            ? _reservedColor
+            : Colors.redAccent; // Simplificado
         return Animate(
           effects: [
             FadeEffect(
@@ -735,7 +755,9 @@ class AdminRegistroReservasScreenState
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12),
               side: BorderSide(
-                color: reserva.confirmada ? _reservedColor : _disabledColor,
+                color: reserva.confirmada
+                    ? _reservedColor
+                    : Colors.redAccent, // Simplificado
                 width: 1.5,
               ),
             ),
@@ -790,6 +812,21 @@ class AdminRegistroReservasScreenState
                     ),
                   ),
                   Text(
+                    'Abono: ${currencyFormat.format(reserva.montoPagado)}',
+                    style: GoogleFonts.montserrat(
+                      fontSize: 14,
+                      color: _reservedColor,
+                    ),
+                  ),
+                  Text(
+                    'Restante: ${currencyFormat.format(montoRestante)}',
+                    style: GoogleFonts.montserrat(
+                      fontSize: 14,
+                      color:
+                          montoRestante > 0 ? Colors.redAccent : _reservedColor,
+                    ),
+                  ),
+                  Text(
                     'Estado: ${reserva.tipoAbono == TipoAbono.completo ? 'Completo' : 'Parcial'}',
                     style: GoogleFonts.montserrat(
                       fontSize: 14,
@@ -799,14 +836,10 @@ class AdminRegistroReservasScreenState
                     ),
                   ),
                   Text(
-                    'Confirmada: ${reserva.confirmada ? 'Sí' : reserva.confirmada == false ? 'No' : 'Indefinido'}',
+                    'Confirmada: $confirmacionText',
                     style: GoogleFonts.montserrat(
                       fontSize: 14,
-                      color: reserva.confirmada
-                          ? _reservedColor
-                          : reserva.confirmada == false
-                              ? Colors.redAccent
-                              : _disabledColor,
+                      color: confirmacionColor,
                     ),
                   ),
                 ],

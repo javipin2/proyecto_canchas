@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -21,15 +22,14 @@ class DetallesReservaScreenState extends State<DetallesReservaScreen>
   late TextEditingController _nombreController;
   late TextEditingController _telefonoController;
   late TextEditingController _emailController;
-  late TextEditingController _montoController;
+  late TextEditingController _montoTotalController;
+  late TextEditingController _montoPagadoController;
   TipoAbono? _selectedTipo;
   final _formKey = GlobalKey<FormState>();
   late Reserva _currentReserva;
 
-  // Controladores para animaciones
   late AnimationController _fadeController;
 
-  // Definición de tema de colores
   final Color _primaryColor = const Color(0xFF3C4043);
   final Color _secondaryColor = const Color(0xFF4285F4);
   final Color _backgroundColor = Colors.white;
@@ -45,8 +45,10 @@ class DetallesReservaScreenState extends State<DetallesReservaScreen>
     _telefonoController =
         TextEditingController(text: widget.reserva.telefono ?? '');
     _emailController = TextEditingController(text: widget.reserva.email ?? '');
-    _montoController =
-        TextEditingController(text: widget.reserva.montoTotal.toString());
+    _montoTotalController =
+        TextEditingController(text: widget.reserva.montoTotal.toStringAsFixed(0));
+    _montoPagadoController =
+        TextEditingController(text: widget.reserva.montoPagado.toStringAsFixed(0));
     _selectedTipo = widget.reserva.tipoAbono;
 
     _fadeController = AnimationController(
@@ -63,7 +65,8 @@ class DetallesReservaScreenState extends State<DetallesReservaScreen>
     _nombreController.dispose();
     _telefonoController.dispose();
     _emailController.dispose();
-    _montoController.dispose();
+    _montoTotalController.dispose();
+    _montoPagadoController.dispose();
     _fadeController.dispose();
     super.dispose();
   }
@@ -91,8 +94,94 @@ class DetallesReservaScreenState extends State<DetallesReservaScreen>
     }
 
     try {
-      double monto =
-          double.tryParse(_montoController.text) ?? widget.reserva.montoTotal;
+      double montoTotal =
+          double.tryParse(_montoTotalController.text) ?? widget.reserva.montoTotal;
+      double montoPagado =
+          double.tryParse(_montoPagadoController.text) ?? widget.reserva.montoPagado;
+
+      // Validar que el abono no exceda el monto total ni sea menor al mínimo (20000)
+      if (montoPagado < 20000) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'El abono debe ser al menos 20000.',
+                style: GoogleFonts.montserrat(),
+              ),
+              backgroundColor: Colors.redAccent,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+              margin: const EdgeInsets.all(12),
+              duration: const Duration(seconds: 4),
+            ),
+          );
+        }
+        return;
+      }
+      if (montoPagado > montoTotal) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'El abono no puede superar el monto total.',
+                style: GoogleFonts.montserrat(),
+              ),
+              backgroundColor: Colors.redAccent,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+              margin: const EdgeInsets.all(12),
+              duration: const Duration(seconds: 4),
+            ),
+          );
+        }
+        return;
+      }
+
+      // Validar consistencia de tipoAbono
+      if (_selectedTipo == TipoAbono.completo && montoPagado != montoTotal) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'El abono debe ser igual al monto total para un pago completo.',
+                style: GoogleFonts.montserrat(),
+              ),
+              backgroundColor: Colors.redAccent,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+              margin: const EdgeInsets.all(12),
+              duration: const Duration(seconds: 4),
+            ),
+          );
+        }
+        return;
+      }
+      if (_selectedTipo == TipoAbono.parcial && montoPagado == montoTotal) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'El abono debe ser menor al monto total para un pago parcial.',
+                style: GoogleFonts.montserrat(),
+              ),
+              backgroundColor: Colors.redAccent,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+              margin: const EdgeInsets.all(12),
+              duration: const Duration(seconds: 4),
+            ),
+          );
+        }
+        return;
+      }
 
       DocumentReference reservaRef = FirebaseFirestore.instance
           .collection('reservas')
@@ -102,7 +191,8 @@ class DetallesReservaScreenState extends State<DetallesReservaScreen>
         'nombre': _nombreController.text,
         'telefono': _telefonoController.text,
         'email': _emailController.text,
-        'montoTotal': monto,
+        'montoTotal': montoTotal,
+        'montoPagado': montoPagado,
         'tipoAbono': _selectedTipo.toString().split('.').last,
       });
 
@@ -114,8 +204,8 @@ class DetallesReservaScreenState extends State<DetallesReservaScreen>
           horario: widget.reserva.horario,
           sede: widget.reserva.sede,
           tipoAbono: _selectedTipo!,
-          montoTotal: monto,
-          montoPagado: widget.reserva.montoPagado,
+          montoTotal: montoTotal,
+          montoPagado: montoPagado,
           nombre: _nombreController.text,
           telefono: _telefonoController.text,
           email: _emailController.text,
@@ -433,6 +523,7 @@ class DetallesReservaScreenState extends State<DetallesReservaScreen>
   }
 
   Widget _buildFormCard() {
+    final reserva = _currentReserva;
     return Card(
       elevation: 0,
       color: _cardColor,
@@ -556,9 +647,9 @@ class DetallesReservaScreenState extends State<DetallesReservaScreen>
               const SizedBox(height: 16),
               isEditing
                   ? TextFormField(
-                      controller: _montoController,
+                      controller: _montoTotalController,
                       decoration: InputDecoration(
-                        labelText: 'Valor',
+                        labelText: 'Valor Total',
                         labelStyle: GoogleFonts.montserrat(
                           color: _primaryColor.withOpacity(0.6),
                         ),
@@ -577,9 +668,10 @@ class DetallesReservaScreenState extends State<DetallesReservaScreen>
                       ),
                       style: GoogleFonts.montserrat(color: _primaryColor),
                       keyboardType: TextInputType.number,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                       validator: (value) {
                         if (value == null || value.trim().isEmpty) {
-                          return 'Ingresa el valor';
+                          return 'Ingresa el valor total';
                         }
                         if (double.tryParse(value) == null) {
                           return 'Ingresa un número válido';
@@ -587,7 +679,54 @@ class DetallesReservaScreenState extends State<DetallesReservaScreen>
                         return null;
                       },
                     )
-                  : _buildDetailRow('Valor', _montoController.text),
+                  : _buildDetailRow('Valor Total', _montoTotalController.text),
+              const SizedBox(height: 16),
+              isEditing
+                  ? TextFormField(
+                      controller: _montoPagadoController,
+                      decoration: InputDecoration(
+                        labelText: 'Abono',
+                        labelStyle: GoogleFonts.montserrat(
+                          color: _primaryColor.withOpacity(0.6),
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide(color: _disabledColor),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide(color: _disabledColor),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide(color: _secondaryColor),
+                        ),
+                      ),
+                      style: GoogleFonts.montserrat(color: _primaryColor),
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      validator: (value) {
+                        if (value == null || value.trim().isEmpty) {
+                          return 'Ingresa el abono';
+                        }
+                        double? abono = double.tryParse(value);
+                        if (abono == null) {
+                          return 'Ingresa un número válido';
+                        }
+                        if (abono < 20000) {
+                          return 'El abono debe ser al menos 20000';
+                        }
+                        double? montoTotal = double.tryParse(_montoTotalController.text);
+                        if (montoTotal == null) {
+                          return 'El valor total no es válido';
+                        }
+                        if (abono > montoTotal) {
+                          return 'El abono no puede superar el valor total';
+                        }
+                        return null;
+                      },
+                    )
+                  : _buildDetailRow('Abono', _montoPagadoController.text),
               const SizedBox(height: 16),
               isEditing
                   ? DropdownButtonFormField<TipoAbono>(

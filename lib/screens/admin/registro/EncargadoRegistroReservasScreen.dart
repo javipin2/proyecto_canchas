@@ -108,9 +108,7 @@ class EncargadoRegistroReservasScreenState
             cancha: cancha,
             fecha: DateFormat('yyyy-MM-dd')
                 .parse(data['fecha'] ?? DateTime.now().toString()),
-            horario: Horario(
-                hora: TimeOfDay(
-                    hour: int.parse(data['horario'].split(':')[0]), minute: 0)),
+            horario: _parseHorario(data['horario'] ?? '12:00 AM'),
             sede: data['sede'] ?? '',
             tipoAbono: data['estado'] == 'completo'
                 ? TipoAbono.completo
@@ -174,6 +172,7 @@ class EncargadoRegistroReservasScreenState
   }
 
   void _showErrorSnackBar(String message) {
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
@@ -524,6 +523,8 @@ class EncargadoRegistroReservasScreenState
   }
 
   Widget _buildDataTable() {
+    final currencyFormat =
+        NumberFormat.currency(symbol: "\$", decimalDigits: 0);
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: SingleChildScrollView(
@@ -551,12 +552,18 @@ class EncargadoRegistroReservasScreenState
             DataColumn(label: Text('Cliente')),
             DataColumn(label: Text('Teléfono')),
             DataColumn(label: Text('Email')),
+            DataColumn(label: Text('Abono')),
+            DataColumn(label: Text('Restante')),
             DataColumn(label: Text('Estado')),
             DataColumn(label: Text('Confirmada')),
             DataColumn(label: Text('Acciones')),
           ],
           rows: _reservas.asMap().entries.map((entry) {
             final reserva = entry.value;
+            final montoRestante = reserva.montoTotal - reserva.montoPagado;
+            final confirmacionText = reserva.confirmada ? 'Sí' : 'No';
+            final confirmacionColor =
+                reserva.confirmada ? _reservedColor : Colors.redAccent;
             return DataRow(
               cells: [
                 DataCell(
@@ -575,6 +582,17 @@ class EncargadoRegistroReservasScreenState
                 DataCell(Text(reserva.telefono ?? 'N/A')),
                 DataCell(Text(reserva.email ?? 'N/A')),
                 DataCell(Text(
+                  currencyFormat.format(reserva.montoPagado),
+                  style: TextStyle(color: _reservedColor),
+                )),
+                DataCell(Text(
+                  currencyFormat.format(montoRestante),
+                  style: TextStyle(
+                      color: montoRestante > 0
+                          ? Colors.redAccent
+                          : _reservedColor),
+                )),
+                DataCell(Text(
                   reserva.tipoAbono == TipoAbono.completo
                       ? 'Completo'
                       : 'Parcial',
@@ -585,11 +603,8 @@ class EncargadoRegistroReservasScreenState
                   ),
                 )),
                 DataCell(Text(
-                  reserva.confirmada ? 'Sí' : 'No',
-                  style: TextStyle(
-                    color:
-                        reserva.confirmada ? _reservedColor : Colors.redAccent,
-                  ),
+                  confirmacionText,
+                  style: TextStyle(color: confirmacionColor),
                 )),
                 DataCell(Row(
                   children: [
@@ -614,10 +629,16 @@ class EncargadoRegistroReservasScreenState
   }
 
   Widget _buildListView() {
+    final currencyFormat =
+        NumberFormat.currency(symbol: "\$", decimalDigits: 0);
     return ListView.builder(
       itemCount: _reservas.length,
       itemBuilder: (context, index) {
         final reserva = _reservas[index];
+        final montoRestante = reserva.montoTotal - reserva.montoPagado;
+        final confirmacionText = reserva.confirmada ? 'Sí' : 'No';
+        final confirmacionColor =
+            reserva.confirmada ? _reservedColor : Colors.redAccent;
         return Animate(
           effects: [
             FadeEffect(
@@ -638,7 +659,7 @@ class EncargadoRegistroReservasScreenState
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12),
               side: BorderSide(
-                color: reserva.confirmada ? _reservedColor : _disabledColor,
+                color: reserva.confirmada ? _reservedColor : Colors.redAccent,
                 width: 1.5,
               ),
             ),
@@ -693,6 +714,21 @@ class EncargadoRegistroReservasScreenState
                     ),
                   ),
                   Text(
+                    'Abono: ${currencyFormat.format(reserva.montoPagado)}',
+                    style: GoogleFonts.montserrat(
+                      fontSize: 14,
+                      color: _reservedColor,
+                    ),
+                  ),
+                  Text(
+                    'Restante: ${currencyFormat.format(montoRestante)}',
+                    style: GoogleFonts.montserrat(
+                      fontSize: 14,
+                      color:
+                          montoRestante > 0 ? Colors.redAccent : _reservedColor,
+                    ),
+                  ),
+                  Text(
                     'Estado: ${reserva.tipoAbono == TipoAbono.completo ? 'Completo' : 'Parcial'}',
                     style: GoogleFonts.montserrat(
                       fontSize: 14,
@@ -702,12 +738,10 @@ class EncargadoRegistroReservasScreenState
                     ),
                   ),
                   Text(
-                    'Confirmada: ${reserva.confirmada ? 'Sí' : 'No'}',
+                    'Confirmada: $confirmacionText',
                     style: GoogleFonts.montserrat(
                       fontSize: 14,
-                      color: reserva.confirmada
-                          ? _reservedColor
-                          : Colors.redAccent,
+                      color: confirmacionColor,
                     ),
                   ),
                 ],
@@ -721,8 +755,7 @@ class EncargadoRegistroReservasScreenState
                     tooltip: 'Confirmar',
                   ),
                   IconButton(
-                    icon: Icon(Icons.cancel,
-                        color: const Color.fromARGB(255, 245, 62, 62)),
+                    icon: Icon(Icons.cancel, color: Colors.redAccent),
                     onPressed: () => _confirmarReserva(reserva, false),
                     tooltip: 'Rechazar',
                   ),

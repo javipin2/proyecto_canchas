@@ -56,7 +56,6 @@ class _DetallesScreenState extends State<DetallesScreen>
       ),
     );
 
-    // Iniciar animación después de que el widget se construya
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _animationController.forward();
     });
@@ -71,14 +70,10 @@ class _DetallesScreenState extends State<DetallesScreen>
   @override
   Widget build(BuildContext context) {
     final double precioCompleto = widget.cancha.precio;
-    const double abono = 20000; // Valor fijo para abono
-    final currencyFormat =
-        NumberFormat.currency(symbol: "\$", decimalDigits: 0);
-
-    // Obtenemos el tema actual para usar sus colores
+    const double abono = 20000;
+    final currencyFormat = NumberFormat.currency(symbol: "\$", decimalDigits: 0);
     final theme = Theme.of(context);
 
-    // Efecto de vibración suave al presionar los botones
     void hapticFeedback() {
       HapticFeedback.lightImpact();
     }
@@ -121,8 +116,6 @@ class _DetallesScreenState extends State<DetallesScreen>
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             const SizedBox(height: 8),
-
-                            // Detalles de la cancha - Card elevada con sombra
                             Container(
                               decoration: BoxDecoration(
                                 color: Colors.white,
@@ -139,7 +132,6 @@ class _DetallesScreenState extends State<DetallesScreen>
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  // Nombre de la cancha
                                   Row(
                                     children: [
                                       Icon(
@@ -160,33 +152,26 @@ class _DetallesScreenState extends State<DetallesScreen>
                                       ),
                                     ],
                                   ),
-
                                   const SizedBox(height: 16),
-
-                                  // Fecha y hora
                                   _buildInfoRow(
                                     Icons.calendar_today_rounded,
                                     'Fecha',
                                     DateFormat('EEEE, d MMMM y', 'es')
                                         .format(widget.fecha),
                                   ),
-
                                   const Padding(
                                     padding: EdgeInsets.symmetric(vertical: 10),
                                     child: Divider(height: 1),
                                   ),
-
                                   _buildInfoRow(
                                     Icons.access_time_rounded,
                                     'Hora',
                                     widget.horario.horaFormateada,
                                   ),
-
                                   const Padding(
                                     padding: EdgeInsets.symmetric(vertical: 10),
                                     child: Divider(height: 1),
                                   ),
-
                                   _buildInfoRow(
                                     Icons.location_on_rounded,
                                     'Sede',
@@ -195,10 +180,7 @@ class _DetallesScreenState extends State<DetallesScreen>
                                 ],
                               ),
                             ),
-
                             const SizedBox(height: 16),
-
-                            // Información de precios
                             Container(
                               decoration: BoxDecoration(
                                 color: Colors.white,
@@ -236,14 +218,11 @@ class _DetallesScreenState extends State<DetallesScreen>
                                 ],
                               ),
                             ),
-
-                            // Espaciador que expande pero es scrollable
                             SizedBox(
-                                height: constraints.maxHeight > 600
-                                    ? constraints.maxHeight * 0.15
-                                    : 16),
-
-                            // Botones de acción - ahora dentro del área scrollable
+                              height: constraints.maxHeight > 600
+                                  ? constraints.maxHeight * 0.15
+                                  : 16,
+                            ),
                             _buildActionButton(
                               label: 'Abonar y Reservar',
                               price: currencyFormat.format(abono),
@@ -255,9 +234,7 @@ class _DetallesScreenState extends State<DetallesScreen>
                                 });
                               },
                             ),
-
                             const SizedBox(height: 12),
-
                             _buildActionButton(
                               label: 'Pagar Completo',
                               price: currencyFormat.format(precioCompleto),
@@ -265,13 +242,11 @@ class _DetallesScreenState extends State<DetallesScreen>
                               onPressed: () {
                                 hapticFeedback();
                                 _animateButtonPress(() {
-                                  _hacerReserva(
-                                      TipoAbono.completo, precioCompleto);
+                                  _hacerReserva(TipoAbono.completo, precioCompleto);
                                 });
                               },
                               isPrimary: true,
                             ),
-
                             const SizedBox(height: 16),
                           ],
                         ),
@@ -428,14 +403,13 @@ class _DetallesScreenState extends State<DetallesScreen>
   }
 
   void _animateButtonPress(VoidCallback action) {
-    // Pequeña animación de botón al presionar
     HapticFeedback.mediumImpact();
     action();
   }
 
-  /// **Método para crear la reserva y subirla a Firebase Firestore**
   Future<void> _hacerReserva(TipoAbono tipoAbono, double montoPagado) async {
     Reserva reserva = Reserva(
+      id: '',
       cancha: widget.cancha,
       fecha: widget.fecha,
       horario: widget.horario,
@@ -444,28 +418,9 @@ class _DetallesScreenState extends State<DetallesScreen>
       montoTotal: widget.cancha.precio,
       montoPagado: montoPagado,
       confirmada: true,
-      id: '',
     );
 
     try {
-      // Mostrar indicador de carga
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) => const Center(
-          child: CircularProgressIndicator(),
-        ),
-      );
-
-      // Subir reserva a Firestore
-      await FirebaseFirestore.instance
-          .collection('reservas')
-          .add(reserva.toFirestore());
-
-      // Cerrar indicador de carga
-      Navigator.pop(context);
-
-      // Navegamos a la pantalla de reserva y esperamos el resultado
       final bool? reservaExitosa = await Navigator.push<bool>(
         context,
         MaterialPageRoute(
@@ -473,23 +428,18 @@ class _DetallesScreenState extends State<DetallesScreen>
         ),
       );
 
-      if (reservaExitosa == true) {
-        Navigator.of(context)
-            .pop(true); // Indicar a HorariosScreen que hubo una reserva
+      if (reservaExitosa == true && mounted) {
+        Navigator.of(context).pop(true);
       }
     } catch (e) {
-      // Cerrar indicador de carga si hay error
-      Navigator.pop(context);
-
-      // Mostrar error
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error al registrar la reserva: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
-
-      throw Exception('🔥 Error al registrar la reserva en Firestore: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error al continuar con la reserva: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 }
