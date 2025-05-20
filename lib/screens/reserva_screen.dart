@@ -1,4 +1,3 @@
-//reserva_screen cliente
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -71,10 +70,9 @@ class _ReservaScreenState extends State<ReservaScreen>
       widget.reserva.telefono = _telefonoController.text;
       widget.reserva.email = _emailController.text;
       widget.reserva.montoPagado = _montoPagado;
-      widget.reserva.tipoAbono =
-          _montoPagado >= widget.reserva.montoTotal
-              ? TipoAbono.completo
-              : TipoAbono.parcial;
+      widget.reserva.tipoAbono = _montoPagado >= widget.reserva.montoTotal
+          ? TipoAbono.completo
+          : TipoAbono.parcial;
 
       try {
         await FirebaseFirestore.instance
@@ -145,7 +143,8 @@ class _ReservaScreenState extends State<ReservaScreen>
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final currencyFormat = NumberFormat.currency(symbol: "\$", decimalDigits: 0);
+    final currencyFormat =
+        NumberFormat.currency(symbol: "\$", decimalDigits: 0);
 
     return Scaffold(
       backgroundColor: Colors.grey[50],
@@ -267,12 +266,14 @@ class _ReservaScreenState extends State<ReservaScreen>
                             children: [
                               _buildInfoItem(
                                 title: 'Precio Total',
-                                value: currencyFormat.format(widget.reserva.montoTotal),
+                                value: currencyFormat
+                                    .format(widget.reserva.montoTotal),
                                 icon: Icons.attach_money,
                               ),
                               _buildInfoItem(
                                 title: 'Abono Inicial',
-                                value: currencyFormat.format(widget.reserva.montoPagado),
+                                value: currencyFormat
+                                    .format(widget.reserva.montoPagado),
                                 icon: Icons.payment,
                               ),
                             ],
@@ -328,29 +329,32 @@ class _ReservaScreenState extends State<ReservaScreen>
                             return null;
                           },
                         ),
-                        const SizedBox(height: 20),
-                        _buildTextField(
-                          controller: _abonoController,
-                          label: 'Abono (mínimo 20000)',
-                          icon: Icons.attach_money,
-                          keyboardType: TextInputType.number,
-                          validatorMsg: 'Por favor ingresa un abono',
-                          extraValidation: (value) {
-                            final abono = double.tryParse(value ?? '0') ?? 0;
-                            if (abono < 20000) {
-                              return 'El abono debe ser al menos 20000';
-                            }
-                            if (abono > widget.reserva.montoTotal) {
-                              return 'El abono no puede superar el precio total';
-                            }
-                            return null;
-                          },
-                          onChanged: (value) {
-                            setState(() {
-                              _montoPagado = double.tryParse(value) ?? widget.reserva.montoPagado;
-                            });
-                          },
-                        ),
+                        if (widget.reserva.tipoAbono == TipoAbono.parcial) ...[
+                          const SizedBox(height: 20),
+                          _buildTextField(
+                            controller: _abonoController,
+                            label: 'Abono (mínimo 20000)',
+                            icon: Icons.attach_money,
+                            keyboardType: TextInputType.number,
+                            validatorMsg: 'Por favor ingresa un abono',
+                            extraValidation: (value) {
+                              final abono = double.tryParse(value ?? '0') ?? 0;
+                              if (abono < 20000) {
+                                return 'El abono debe ser al menos 20000';
+                              }
+                              if (abono > widget.reserva.montoTotal) {
+                                return 'El abono no puede superar el precio total';
+                              }
+                              return null;
+                            },
+                            onChanged: (value) {
+                              setState(() {
+                                _montoPagado = double.tryParse(value) ??
+                                    widget.reserva.montoPagado;
+                              });
+                            },
+                          ),
+                        ],
                         const SizedBox(height: 40),
                         AnimatedContainer(
                           duration: const Duration(milliseconds: 300),

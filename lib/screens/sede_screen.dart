@@ -375,8 +375,7 @@ class _SedeScreenState extends State<SedeScreen>
                 HapticFeedback.lightImpact();
                 Navigator.push(
                   context,
-                  MaterialPageRoute(
-                      builder: (context) => const AdminLoginScreen()),
+                  MaterialPageRoute(builder: (context) => const LoginScreen()),
                 );
               },
               borderRadius: BorderRadius.circular(10),

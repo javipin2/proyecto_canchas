@@ -71,7 +71,8 @@ class _DetallesScreenState extends State<DetallesScreen>
   Widget build(BuildContext context) {
     final double precioCompleto = widget.cancha.precio;
     const double abono = 20000;
-    final currencyFormat = NumberFormat.currency(symbol: "\$", decimalDigits: 0);
+    final currencyFormat =
+        NumberFormat.currency(symbol: "\$", decimalDigits: 0);
     final theme = Theme.of(context);
 
     void hapticFeedback() {
@@ -242,7 +243,8 @@ class _DetallesScreenState extends State<DetallesScreen>
                               onPressed: () {
                                 hapticFeedback();
                                 _animateButtonPress(() {
-                                  _hacerReserva(TipoAbono.completo, precioCompleto);
+                                  _hacerReserva(
+                                      TipoAbono.completo, precioCompleto);
                                 });
                               },
                               isPrimary: true,
@@ -330,15 +332,13 @@ class _DetallesScreenState extends State<DetallesScreen>
     required VoidCallback onPressed,
     bool isPrimary = false,
   }) {
-    return TweenAnimationBuilder<double>(
-      tween: Tween<double>(begin: 0.0, end: 1.0),
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.easeOut,
-      builder: (context, value, child) {
+    return AnimatedBuilder(
+      animation: _animationController,
+      builder: (context, child) {
         return Transform.scale(
-          scale: 0.95 + (0.05 * value),
+          scale: 0.95 + (0.05 * _animationController.value),
           child: Opacity(
-            opacity: value,
+            opacity: _animationController.value,
             child: child,
           ),
         );

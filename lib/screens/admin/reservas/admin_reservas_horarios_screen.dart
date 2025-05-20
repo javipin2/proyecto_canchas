@@ -608,29 +608,6 @@ class AdminReservasScreenState extends State<AdminReservasScreen>
   }
 
   Widget _buildGridView() {
-    if (_isLoading) {
-      return Expanded(
-        child: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              CircularProgressIndicator(
-                strokeWidth: 3,
-                valueColor: AlwaysStoppedAnimation<Color>(_secondaryColor),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'Cargando horarios...',
-                style: GoogleFonts.montserrat(
-                  color: Color.fromRGBO(60, 64, 67, 0.6),
-                  fontSize: 16,
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -645,106 +622,323 @@ class AdminReservasScreenState extends State<AdminReservasScreen>
             ),
           ),
         ),
-        Expanded(
-          child: GridView.builder(
-            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: MediaQuery.of(context).size.width > 800 ? 5 : 3,
-              childAspectRatio:
-                  MediaQuery.of(context).size.width > 800 ? 2 : 1.5,
-              crossAxisSpacing: 12,
-              mainAxisSpacing: 12,
-            ),
-            itemCount: _hours.length,
-            itemBuilder: (context, index) {
-              final hour = _hours[index];
-              final now = DateTime.now();
-              final isToday = _selectedDate.year == now.year &&
-                  _selectedDate.month == now.month &&
-                  _selectedDate.day == now.day;
-              final isPast = isToday && hour < now.hour;
-              final isReserved = _reservedMap.containsKey(hour);
-              final reserva = isReserved ? _reservedMap[hour] : null;
-
-              Color bgColor;
-              Color textColor;
-              IconData statusIcon;
-              String statusText;
-
-              if (isPast) {
-                bgColor = Color.fromRGBO(218, 220, 224, 0.5);
-                textColor = Colors.grey;
-                statusIcon = Icons.history;
-                statusText = 'Pasado';
-              } else if (isReserved) {
-                bgColor = Color.fromRGBO(76, 175, 80, 0.2);
-                textColor = _reservedColor;
-                statusIcon = Icons.event_busy;
-                statusText = 'Reservado';
-              } else {
-                bgColor = _availableColor;
-                textColor = _primaryColor;
-                statusIcon = Icons.event_available;
-                statusText = 'Disponible';
-              }
-
-              return Animate(
-                effects: [
-                  FadeEffect(
-                    delay: Duration(milliseconds: 50 * (index % 10)),
-                    duration: const Duration(milliseconds: 400),
+        if (_isLoading)
+          Expanded(
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(
+                    strokeWidth: 3,
+                    valueColor: AlwaysStoppedAnimation<Color>(_secondaryColor),
                   ),
-                  ScaleEffect(
-                    begin: const Offset(0.95, 0.95),
-                    end: const Offset(1.0, 1.0),
-                    delay: Duration(milliseconds: 50 * (index % 10)),
-                    duration: const Duration(milliseconds: 400),
-                    curve: Curves.easeOutQuad,
+                  const SizedBox(height: 16),
+                  Text(
+                    'Cargando horarios...',
+                    style: GoogleFonts.montserrat(
+                      color: Color.fromRGBO(60, 64, 67, 0.6),
+                      fontSize: 16,
+                    ),
                   ),
                 ],
-                child: Hero(
-                  tag: 'hora_grid_$hour',
-                  child: Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      onTap: isPast
-                          ? null
-                          : () {
-                              if (isReserved) {
-                                _viewReservaDetails(reserva!);
-                              } else {
-                                _addReserva(hour);
-                              }
-                            },
-                      borderRadius: BorderRadius.circular(12),
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 300),
-                        decoration: BoxDecoration(
-                          color: bgColor,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: isPast
-                                ? _disabledColor
-                                : isReserved
-                                    ? _reservedColor
-                                    : Color.fromRGBO(60, 64, 67, 0.3),
-                            width: 1.5,
-                          ),
-                          boxShadow: [
-                            BoxShadow(
+              ),
+            ),
+          )
+        else
+          Expanded(
+            child: GridView.builder(
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: MediaQuery.of(context).size.width > 800 ? 5 : 3,
+                childAspectRatio:
+                    MediaQuery.of(context).size.width > 800 ? 2 : 1.5,
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
+              ),
+              itemCount: _hours.length,
+              itemBuilder: (context, index) {
+                final hour = _hours[index];
+                final now = DateTime.now();
+                final isToday = _selectedDate.year == now.year &&
+                    _selectedDate.month == now.month &&
+                    _selectedDate.day == now.day;
+                final isPast = isToday && hour < now.hour;
+                final isReserved = _reservedMap.containsKey(hour);
+                final reserva = isReserved ? _reservedMap[hour] : null;
+
+                Color bgColor;
+                Color textColor;
+                IconData statusIcon;
+                String statusText;
+
+                if (isPast) {
+                  bgColor = Color.fromRGBO(218, 220, 224, 0.5);
+                  textColor = Colors.grey;
+                  statusIcon = Icons.history;
+                  statusText = 'Pasado';
+                } else if (isReserved) {
+                  bgColor = Color.fromRGBO(76, 175, 80, 0.2);
+                  textColor = _reservedColor;
+                  statusIcon = Icons.event_busy;
+                  statusText = 'Reservado';
+                } else {
+                  bgColor = _availableColor;
+                  textColor = _primaryColor;
+                  statusIcon = Icons.event_available;
+                  statusText = 'Disponible';
+                }
+
+                return Animate(
+                  effects: [
+                    FadeEffect(
+                      delay: Duration(milliseconds: 50 * (index % 10)),
+                      duration: const Duration(milliseconds: 400),
+                    ),
+                    ScaleEffect(
+                      begin: const Offset(0.95, 0.95),
+                      end: const Offset(1.0, 1.0),
+                      delay: Duration(milliseconds: 50 * (index % 10)),
+                      duration: const Duration(milliseconds: 400),
+                      curve: Curves.easeOutQuad,
+                    ),
+                  ],
+                  child: Hero(
+                    tag: 'hora_grid_$hour',
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: isPast
+                            ? null
+                            : () {
+                                if (isReserved) {
+                                  _viewReservaDetails(reserva!);
+                                } else {
+                                  _addReserva(hour);
+                                }
+                              },
+                        borderRadius: BorderRadius.circular(12),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 300),
+                          decoration: BoxDecoration(
+                            color: bgColor,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
                               color: isPast
-                                  ? Colors.black.withAlpha(13)
+                                  ? _disabledColor
                                   : isReserved
-                                      ? Color.fromRGBO(76, 175, 80, 0.15)
-                                      : Color.fromRGBO(60, 64, 67, 0.1),
-                              blurRadius: 8,
-                              offset: const Offset(0, 2),
+                                      ? _reservedColor
+                                      : Color.fromRGBO(60, 64, 67, 0.3),
+                              width: 1.5,
                             ),
-                          ],
+                            boxShadow: [
+                              BoxShadow(
+                                color: isPast
+                                    ? Colors.black.withAlpha(13)
+                                    : isReserved
+                                        ? Color.fromRGBO(76, 175, 80, 0.15)
+                                        : Color.fromRGBO(60, 64, 67, 0.1),
+                                blurRadius: 8,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                DateFormat('h:mm a')
+                                    .format(DateTime(2022, 1, 1, hour)),
+                                style: GoogleFonts.montserrat(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                  color: textColor,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    statusIcon,
+                                    size: 14,
+                                    color: textColor,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    statusText,
+                                    style: GoogleFonts.montserrat(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w500,
+                                      color: textColor,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
                         ),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildListView() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 4.0),
+          child: Text(
+            'Horarios Disponibles',
+            style: GoogleFonts.montserrat(
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+              color: _primaryColor,
+            ),
+          ),
+        ),
+        if (_isLoading)
+          Expanded(
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(
+                    strokeWidth: 3,
+                    valueColor: AlwaysStoppedAnimation<Color>(_secondaryColor),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Cargando horarios...',
+                    style: GoogleFonts.montserrat(
+                      color: Color.fromRGBO(60, 64, 67, 0.6),
+                      fontSize: 16,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          )
+        else
+          Expanded(
+            child: ListView.builder(
+              itemCount: _hours.length,
+              itemBuilder: (context, index) {
+                final hour = _hours[index];
+                final now = DateTime.now();
+                final isToday = _selectedDate.year == now.year &&
+                    _selectedDate.month == now.month &&
+                    _selectedDate.day == now.day;
+                final isPast = isToday && hour < now.hour;
+                final isReserved = _reservedMap.containsKey(hour);
+                final reserva = isReserved ? _reservedMap[hour] : null;
+
+                Color bgColor;
+                Color textColor;
+                IconData statusIcon;
+                String statusText;
+
+                if (isPast) {
+                  bgColor = Color.fromRGBO(218, 220, 224, 0.5);
+                  textColor = Colors.grey;
+                  statusIcon = Icons.history;
+                  statusText = 'Pasado';
+                } else if (isReserved) {
+                  bgColor = Color.fromRGBO(76, 175, 80, 0.1);
+                  textColor = _reservedColor;
+                  statusIcon = Icons.event_busy;
+                  statusText = 'Reservado';
+                } else {
+                  bgColor = Colors.white;
+                  textColor = _primaryColor;
+                  statusIcon = Icons.event_available;
+                  statusText = 'Disponible';
+                }
+
+                return Animate(
+                  effects: [
+                    FadeEffect(
+                      delay: Duration(milliseconds: 50 * (index % 10)),
+                      duration: const Duration(milliseconds: 400),
+                    ),
+                    SlideEffect(
+                      begin: const Offset(0.05, 0),
+                      end: Offset.zero,
+                      delay: Duration(milliseconds: 50 * (index % 10)),
+                      duration: const Duration(milliseconds: 400),
+                      curve: Curves.easeOutQuad,
+                    ),
+                  ],
+                  child: Padding(
+                    padding: const EdgeInsets.only(bottom: 8.0),
+                    child: Hero(
+                      tag: 'hora_list_$hour',
+                      child: Material(
+                        color: Colors.transparent,
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 300),
+                          decoration: BoxDecoration(
+                            color: bgColor,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: isPast
+                                  ? _disabledColor
+                                  : isReserved
+                                      ? _reservedColor
+                                      : Color.fromRGBO(60, 64, 67, 0.3),
+                              width: 1.5,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: isPast
+                                    ? Colors.black.withAlpha(13)
+                                    : isReserved
+                                        ? Color.fromRGBO(76, 175, 80, 0.15)
+                                        : Color.fromRGBO(60, 64, 67, 0.1),
+                                blurRadius: 6,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                          child: ListTile(
+                            onTap: isPast
+                                ? null
+                                : () {
+                                    if (isReserved) {
+                                      _viewReservaDetails(reserva!);
+                                    } else {
+                                      _addReserva(hour);
+                                    }
+                                  },
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 16.0, vertical: 8.0),
+                            leading: Container(
+                              width: 48,
+                              height: 48,
+                              decoration: BoxDecoration(
+                                color: isPast
+                                    ? Color.fromRGBO(218, 220, 224, 0.2)
+                                    : isReserved
+                                        ? Color.fromRGBO(76, 175, 80, 0.2)
+                                        : _availableColor,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Center(
+                                child: Icon(
+                                  statusIcon,
+                                  color: textColor,
+                                ),
+                              ),
+                            ),
+                            title: Text(
                               DateFormat('h:mm a')
                                   .format(DateTime(2022, 1, 1, hour)),
                               style: GoogleFonts.montserrat(
@@ -753,248 +947,55 @@ class AdminReservasScreenState extends State<AdminReservasScreen>
                                 color: textColor,
                               ),
                             ),
-                            const SizedBox(height: 4),
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  statusIcon,
-                                  size: 14,
-                                  color: textColor,
-                                ),
-                                const SizedBox(width: 4),
-                                Text(
-                                  statusText,
-                                  style: GoogleFonts.montserrat(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w500,
-                                    color: textColor,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              );
-            },
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildListView() {
-    if (_isLoading) {
-      return Expanded(
-        child: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              CircularProgressIndicator(
-                strokeWidth: 3,
-                valueColor: AlwaysStoppedAnimation<Color>(_secondaryColor),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'Cargando horarios...',
-                style: GoogleFonts.montserrat(
-                  color: Color.fromRGBO(60, 64, 67, 0.6),
-                  fontSize: 16,
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 4.0),
-          child: Text(
-            'Horarios Disponibles',
-            style: GoogleFonts.montserrat(
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
-              color: _primaryColor,
-            ),
-          ),
-        ),
-        Expanded(
-          child: ListView.builder(
-            itemCount: _hours.length,
-            itemBuilder: (context, index) {
-              final hour = _hours[index];
-              final now = DateTime.now();
-              final isToday = _selectedDate.year == now.year &&
-                  _selectedDate.month == now.month &&
-                  _selectedDate.day == now.day;
-              final isPast = isToday && hour < now.hour;
-              final isReserved = _reservedMap.containsKey(hour);
-              final reserva = isReserved ? _reservedMap[hour] : null;
-
-              Color bgColor;
-              Color textColor;
-              IconData statusIcon;
-              String statusText;
-
-              if (isPast) {
-                bgColor = Color.fromRGBO(218, 220, 224, 0.5);
-                textColor = Colors.grey;
-                statusIcon = Icons.history;
-                statusText = 'Pasado';
-              } else if (isReserved) {
-                bgColor = Color.fromRGBO(76, 175, 80, 0.1);
-                textColor = _reservedColor;
-                statusIcon = Icons.event_busy;
-                statusText = 'Reservado';
-              } else {
-                bgColor = Colors.white;
-                textColor = _primaryColor;
-                statusIcon = Icons.event_available;
-                statusText = 'Disponible';
-              }
-
-              return Animate(
-                effects: [
-                  FadeEffect(
-                    delay: Duration(milliseconds: 50 * (index % 10)),
-                    duration: const Duration(milliseconds: 400),
-                  ),
-                  SlideEffect(
-                    begin: const Offset(0.05, 0),
-                    end: Offset.zero,
-                    delay: Duration(milliseconds: 50 * (index % 10)),
-                    duration: const Duration(milliseconds: 400),
-                    curve: Curves.easeOutQuad,
-                  ),
-                ],
-                child: Padding(
-                  padding: const EdgeInsets.only(bottom: 8.0),
-                  child: Hero(
-                    tag: 'hora_list_$hour',
-                    child: Material(
-                      color: Colors.transparent,
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 300),
-                        decoration: BoxDecoration(
-                          color: bgColor,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: isPast
-                                ? _disabledColor
-                                : isReserved
-                                    ? _reservedColor
-                                    : Color.fromRGBO(60, 64, 67, 0.3),
-                            width: 1.5,
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: isPast
-                                  ? Colors.black.withAlpha(13)
-                                  : isReserved
-                                      ? Color.fromRGBO(76, 175, 80, 0.15)
-                                      : Color.fromRGBO(60, 64, 67, 0.1),
-                              blurRadius: 6,
-                              offset: const Offset(0, 2),
-                            ),
-                          ],
-                        ),
-                        child: ListTile(
-                          onTap: isPast
-                              ? null
-                              : () {
-                                  if (isReserved) {
-                                    _viewReservaDetails(reserva!);
-                                  } else {
-                                    _addReserva(hour);
-                                  }
-                                },
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 16.0, vertical: 8.0),
-                          leading: Container(
-                            width: 48,
-                            height: 48,
-                            decoration: BoxDecoration(
-                              color: isPast
-                                  ? Color.fromRGBO(218, 220, 224, 0.2)
-                                  : isReserved
-                                      ? Color.fromRGBO(76, 175, 80, 0.2)
-                                      : _availableColor,
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Center(
-                              child: Icon(
-                                statusIcon,
-                                color: textColor,
+                            subtitle: Text(
+                              '$statusText${isReserved ? ' por: ${reserva?.nombre ?? "Cliente"}' : isPast ? '' : ' para reservar'}',
+                              style: GoogleFonts.montserrat(
+                                fontSize: 14,
+                                color: Color.fromRGBO(
+                                    textColor.r.toInt(),
+                                    textColor.g.toInt(),
+                                    textColor.b.toInt(),
+                                    0.8),
                               ),
                             ),
+                            trailing: isReserved && !isPast
+                                ? Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      IconButton(
+                                        icon: Icon(Icons.edit,
+                                            color: _secondaryColor, size: 20),
+                                        onPressed: () =>
+                                            _viewReservaDetails(reserva!),
+                                        tooltip: 'Editar',
+                                      ),
+                                      IconButton(
+                                        icon: Icon(Icons.delete,
+                                            color: Colors.redAccent, size: 20),
+                                        onPressed: () =>
+                                            _confirmDelete(reserva!),
+                                        tooltip: 'Eliminar',
+                                      ),
+                                    ],
+                                  )
+                                : Icon(
+                                    Icons.arrow_forward_ios_rounded,
+                                    size: 16,
+                                    color: Color.fromRGBO(
+                                        textColor.r.toInt(),
+                                        textColor.g.toInt(),
+                                        textColor.b.toInt(),
+                                        0.5),
+                                  ),
                           ),
-                          title: Text(
-                            DateFormat('h:mm a')
-                                .format(DateTime(2022, 1, 1, hour)),
-                            style: GoogleFonts.montserrat(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                              color: textColor,
-                            ),
-                          ),
-                          subtitle: Text(
-                            '$statusText${isReserved ? ' por: ${reserva?.nombre ?? "Cliente"}' : isPast ? '' : ' para reservar'}',
-                            style: GoogleFonts.montserrat(
-                              fontSize: 14,
-                              color: Color.fromRGBO(
-                                  textColor.r.toInt(),
-                                  textColor.g.toInt(),
-                                  textColor.b.toInt(),
-                                  0.8),
-                            ),
-                          ),
-                          trailing: isReserved && !isPast
-                              ? Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    IconButton(
-                                      icon: Icon(Icons.edit,
-                                          color: _secondaryColor, size: 20),
-                                      onPressed: () =>
-                                          _viewReservaDetails(reserva!),
-                                      tooltip: 'Editar',
-                                    ),
-                                    IconButton(
-                                      icon: Icon(Icons.delete,
-                                          color: Colors.redAccent, size: 20),
-                                      onPressed: () => _confirmDelete(reserva!),
-                                      tooltip: 'Eliminar',
-                                    ),
-                                  ],
-                                )
-                              : Icon(
-                                  Icons.arrow_forward_ios_rounded,
-                                  size: 16,
-                                  color: Color.fromRGBO(
-                                      textColor.r.toInt(),
-                                      textColor.g.toInt(),
-                                      textColor.b.toInt(),
-                                      0.5),
-                                ),
                         ),
                       ),
                     ),
                   ),
-                ),
-              );
-            },
+                );
+              },
+            ),
           ),
-        ),
       ],
     );
   }
