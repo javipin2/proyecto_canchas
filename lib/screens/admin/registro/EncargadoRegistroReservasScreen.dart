@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -10,6 +11,7 @@ import '../../../../models/reserva.dart';
 import '../../../../models/cancha.dart';
 import '../../../../models/horario.dart';
 import '../../../../providers/cancha_provider.dart';
+import '../../sede_screen.dart';
 
 class EncargadoRegistroReservasScreen extends StatefulWidget {
   const EncargadoRegistroReservasScreen({super.key});
@@ -22,15 +24,18 @@ class EncargadoRegistroReservasScreen extends StatefulWidget {
 class EncargadoRegistroReservasScreenState
     extends State<EncargadoRegistroReservasScreen>
     with TickerProviderStateMixin {
+  // Variables de estado
   List<Reserva> _reservas = [];
   DateTime? _selectedDate;
   String? _selectedSede;
   bool _isLoading = false;
   bool _viewTable = true;
 
+  // Controladores de animación
   late AnimationController _fadeController;
   late AnimationController _slideController;
 
+  // Colores del tema
   final Color _primaryColor = const Color(0xFF3C4043);
   final Color _secondaryColor = const Color(0xFF4285F4);
   final Color _backgroundColor = Colors.white;
@@ -41,7 +46,11 @@ class EncargadoRegistroReservasScreenState
   @override
   void initState() {
     super.initState();
-    initializeDateFormatting('es', null);
+    _initializeControllers();
+    _setupInitialData();
+  }
+
+  void _initializeControllers() {
     _fadeController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 800),
@@ -50,7 +59,10 @@ class EncargadoRegistroReservasScreenState
       vsync: this,
       duration: const Duration(milliseconds: 600),
     );
+  }
 
+  void _setupInitialData() {
+    initializeDateFormatting('es', null);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadReservas();
       _fadeController.forward();
@@ -70,68 +82,23 @@ class EncargadoRegistroReservasScreenState
       _isLoading = true;
       _reservas.clear();
     });
+
     try {
       final canchaProvider =
           Provider.of<CanchaProvider>(context, listen: false);
-      await canchaProvider.fetchCanchas('Sede 1');
-      await canchaProvider.fetchCanchas('Sede 2');
+      await _fetchCanchas(canchaProvider);
       final canchasMap = {
         for (var cancha in canchaProvider.canchas) cancha.id: cancha
       };
 
-      QuerySnapshot querySnapshot = await FirebaseFirestore.instance
+      final querySnapshot = await FirebaseFirestore.instance
           .collection('reservas')
           .get()
           .timeout(const Duration(seconds: 10), onTimeout: () {
         throw TimeoutException('La consulta tardó demasiado');
       });
 
-      List<Reserva> reservasTemp = [];
-      for (var doc in querySnapshot.docs) {
-        try {
-          final data = doc.data() as Map<String, dynamic>;
-          final canchaId = data['cancha_id'] ?? '';
-          final cancha = canchasMap[canchaId] ??
-              Cancha(
-                id: canchaId,
-                nombre: 'Cancha desconocida',
-                descripcion: '',
-                imagen: 'assets/cancha_demo.png',
-                techada: false,
-                ubicacion: '',
-                precio: 0.0,
-                sede: data['sede'] ?? '',
-              );
-
-          final reserva = Reserva(
-            id: doc.id,
-            cancha: cancha,
-            fecha: DateFormat('yyyy-MM-dd')
-                .parse(data['fecha'] ?? DateTime.now().toString()),
-            horario: _parseHorario(data['horario'] ?? '12:00 AM'),
-            sede: data['sede'] ?? '',
-            tipoAbono: data['estado'] == 'completo'
-                ? TipoAbono.completo
-                : TipoAbono.parcial,
-            montoTotal: (data['valor'] ?? 0).toDouble(),
-            montoPagado: (data['montoPagado'] ?? 0).toDouble(),
-            nombre: data['nombre'],
-            telefono: data['telefono'],
-            email: data['correo'],
-            confirmada: data['confirmada'] ?? false,
-          );
-          reservasTemp.add(reserva);
-        } catch (e) {
-          debugPrint('Error al procesar documento: $e');
-        }
-      }
-
-      if (mounted) {
-        setState(() {
-          _reservas = reservasTemp;
-          _applyFilters();
-        });
-      }
+      _processReservas(querySnapshot, canchasMap);
     } catch (e) {
       if (mounted) {
         _showErrorSnackBar('Error al cargar reservas: $e');
@@ -147,12 +114,97 @@ class EncargadoRegistroReservasScreenState
     }
   }
 
+  Future<void> _fetchCanchas(CanchaProvider canchaProvider) async {
+    await canchaProvider.fetchCanchas('Sede 1');
+    await canchaProvider.fetchCanchas('Sede 2');
+  }
+
+  void _processReservas(
+      QuerySnapshot querySnapshot, Map<String, Cancha> canchasMap) {
+    List<Reserva> reservasTemp = [];
+
+    for (var doc in querySnapshot.docs) {
+      try {
+        final data = doc.data() as Map<String, dynamic>;
+        final canchaId = data['cancha_id'] ?? '';
+        final cancha =
+            canchasMap[canchaId] ?? _createDefaultCancha(canchaId, data);
+
+        final reserva = Reserva(
+          id: doc.id,
+          cancha: cancha,
+          fecha: DateFormat('yyyy-MM-dd')
+              .parse(data['fecha'] ?? DateTime.now().toString()),
+          horario: _parseHorario(data['horario'] ?? '12:00 AM'),
+          sede: data['sede'] ?? '',
+          tipoAbono: data['estado'] == 'completo'
+              ? TipoAbono.completo
+              : TipoAbono.parcial,
+          montoTotal: (data['valor'] ?? 0).toDouble(),
+          montoPagado: (data['montoPagado'] ?? 0).toDouble(),
+          nombre: data['nombre'],
+          telefono: data['telefono'],
+          email: data['correo'],
+          confirmada: data['confirmada'] ?? false,
+        );
+        reservasTemp.add(reserva);
+      } catch (e) {
+        debugPrint('Error al procesar documento: $e');
+      }
+    }
+
+    if (mounted) {
+      setState(() {
+        _reservas = reservasTemp;
+        _applyFilters();
+      });
+    }
+  }
+
+  Cancha _createDefaultCancha(String canchaId, Map<String, dynamic> data) {
+    return Cancha(
+      id: canchaId,
+      nombre: 'Cancha desconocida',
+      descripcion: '',
+      imagen: 'assets/cancha_demo.png',
+      techada: false,
+      ubicacion: '',
+      precio: 0.0,
+      sede: data['sede'] ?? '',
+    );
+  }
+
+  Future<void> _logout(BuildContext context) async {
+    final navigator = Navigator.of(context);
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+
+    try {
+      await FirebaseAuth.instance.signOut();
+      if (mounted) {
+        navigator.pushAndRemoveUntil(
+          MaterialPageRoute(builder: (context) => const SedeScreen()),
+          (route) => false,
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        scaffoldMessenger.showSnackBar(
+          SnackBar(
+            content: Text('Error al cerrar sesión: $e'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
+    }
+  }
+
   Horario _parseHorario(String horarioStr) {
     try {
       final pattern = RegExp(r'(\d+):(\d+)\s*(AM|PM)', caseSensitive: false);
       final match = pattern.firstMatch(horarioStr);
-      if (match == null)
+      if (match == null) {
         return Horario(hora: const TimeOfDay(hour: 0, minute: 0));
+      }
 
       int hour = int.parse(match.group(1)!);
       final minute = int.parse(match.group(2)!);
@@ -173,6 +225,7 @@ class EncargadoRegistroReservasScreenState
 
   void _showErrorSnackBar(String message) {
     if (!mounted) return;
+
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
@@ -196,7 +249,7 @@ class EncargadoRegistroReservasScreenState
   }
 
   Future<void> _selectDate(BuildContext context) async {
-    DateTime? newDate = await showDatePicker(
+    final DateTime? newDate = await showDatePicker(
       context: context,
       initialDate: _selectedDate ?? DateTime.now(),
       firstDate: DateTime(2020),
@@ -219,6 +272,7 @@ class EncargadoRegistroReservasScreenState
         );
       },
     );
+
     if (newDate != null && mounted) {
       setState(() {
         _selectedDate = newDate;
@@ -236,18 +290,20 @@ class EncargadoRegistroReservasScreenState
 
   void _applyFilters() {
     List<Reserva> filteredReservas = _reservas;
+
     if (_selectedDate != null) {
       final fechaStr = DateFormat('yyyy-MM-dd').format(_selectedDate!);
-      filteredReservas = filteredReservas
-          .where((reserva) =>
-              DateFormat('yyyy-MM-dd').format(reserva.fecha) == fechaStr)
-          .toList();
+      filteredReservas = filteredReservas.where((reserva) {
+        return DateFormat('yyyy-MM-dd').format(reserva.fecha) == fechaStr;
+      }).toList();
     }
+
     if (_selectedSede != null && _selectedSede!.isNotEmpty) {
-      filteredReservas = filteredReservas
-          .where((reserva) => reserva.sede == _selectedSede)
-          .toList();
+      filteredReservas = filteredReservas.where((reserva) {
+        return reserva.sede == _selectedSede;
+      }).toList();
     }
+
     setState(() {
       _reservas = filteredReservas;
     });
@@ -291,17 +347,21 @@ class EncargadoRegistroReservasScreenState
         actions: [
           Tooltip(
             message: _viewTable ? 'Vista en Lista' : 'Vista en Tabla',
-            child: Container(
-              margin: const EdgeInsets.only(right: 16),
-              child: IconButton(
-                icon: Icon(
-                  _viewTable
-                      ? Icons.view_list_rounded
-                      : Icons.table_chart_rounded,
-                  color: _secondaryColor,
-                ),
-                onPressed: _toggleView,
+            child: IconButton(
+              icon: Icon(
+                _viewTable
+                    ? Icons.view_list_rounded
+                    : Icons.table_chart_rounded,
+                color: _secondaryColor,
               ),
+              onPressed: _toggleView,
+            ),
+          ),
+          Tooltip(
+            message: 'Cerrar sesión',
+            child: IconButton(
+              icon: Icon(Icons.exit_to_app, color: _secondaryColor),
+              onPressed: () => _logout(context),
             ),
           ),
         ],
@@ -330,57 +390,65 @@ class EncargadoRegistroReservasScreenState
               const SizedBox(height: 16),
               Expanded(
                 child: _isLoading
-                    ? Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            CircularProgressIndicator(
-                              strokeWidth: 3,
-                              valueColor: AlwaysStoppedAnimation<Color>(
-                                  _secondaryColor),
-                            ),
-                            const SizedBox(height: 16),
-                            Text(
-                              'Cargando reservas...',
-                              style: GoogleFonts.montserrat(
-                                color: _primaryColor,
-                                fontSize: 16,
-                              ),
-                            ),
-                          ],
-                        ),
-                      )
+                    ? _buildLoadingIndicator()
                     : _reservas.isEmpty
-                        ? Center(
-                            child: Text(
-                              _selectedDate == null && _selectedSede == null
-                                  ? 'No hay reservas registradas'
-                                  : 'No hay reservas para los filtros seleccionados',
-                              style:
-                                  GoogleFonts.montserrat(color: _primaryColor),
-                            ),
-                          )
-                        : AnimatedSwitcher(
-                            duration: const Duration(milliseconds: 400),
-                            switchInCurve: Curves.easeInOut,
-                            switchOutCurve: Curves.easeInOut,
-                            transitionBuilder:
-                                (Widget child, Animation<double> animation) {
-                              return FadeTransition(
-                                opacity: animation,
-                                child: child,
-                              );
-                            },
-                            child: _viewTable &&
-                                    MediaQuery.of(context).size.width > 600
-                                ? _buildDataTable()
-                                : _buildListView(),
-                          ),
+                        ? _buildEmptyState()
+                        : _buildReservasView(),
               ),
             ],
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildLoadingIndicator() {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          CircularProgressIndicator(
+            strokeWidth: 3,
+            valueColor: AlwaysStoppedAnimation<Color>(_secondaryColor),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Cargando reservas...',
+            style: GoogleFonts.montserrat(
+              color: _primaryColor,
+              fontSize: 16,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: Text(
+        _selectedDate == null && _selectedSede == null
+            ? 'No hay reservas registradas'
+            : 'No hay reservas para los filtros seleccionados',
+        style: GoogleFonts.montserrat(color: _primaryColor),
+      ),
+    );
+  }
+
+  Widget _buildReservasView() {
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 400),
+      switchInCurve: Curves.easeInOut,
+      switchOutCurve: Curves.easeInOut,
+      transitionBuilder: (Widget child, Animation<double> animation) {
+        return FadeTransition(
+          opacity: animation,
+          child: child,
+        );
+      },
+      child: _viewTable && MediaQuery.of(context).size.width > 600
+          ? _buildDataTable()
+          : _buildListView(),
     );
   }
 
@@ -396,129 +464,136 @@ class EncargadoRegistroReservasScreenState
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                Icon(
-                  Icons.calendar_today_rounded,
-                  color: _secondaryColor,
-                  size: 24,
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Filtrar por Fecha',
-                        style: GoogleFonts.montserrat(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                          color: Color.fromRGBO(60, 64, 67, 0.6),
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      InkWell(
-                        onTap: () => _selectDate(context),
-                        child: Text(
-                          _selectedDate == null
-                              ? 'Todas las fechas'
-                              : DateFormat('EEEE d MMMM, yyyy', 'es')
-                                  .format(_selectedDate!),
-                          style: GoogleFonts.montserrat(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                            color: _primaryColor,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                if (_selectedDate != null)
-                  IconButton(
-                    icon: Icon(Icons.clear, color: Colors.redAccent),
-                    onPressed: _clearFilters,
-                    tooltip: 'Limpiar filtros',
-                  ),
-              ],
-            ),
+            _buildDateFilter(),
             const SizedBox(height: 16),
-            Row(
-              children: [
-                Icon(
-                  Icons.store,
-                  color: _secondaryColor,
-                  size: 24,
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Filtrar por Sede',
-                        style: GoogleFonts.montserrat(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                          color: Color.fromRGBO(60, 64, 67, 0.6),
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      DropdownButton<String>(
-                        value: _selectedSede,
-                        hint: Text(
-                          'Todas las sedes',
-                          style: GoogleFonts.montserrat(
-                            color: _primaryColor,
-                          ),
-                        ),
-                        items: [
-                          DropdownMenuItem(
-                            value: null,
-                            child: Text(
-                              'Todas las sedes',
-                              style: GoogleFonts.montserrat(),
-                            ),
-                          ),
-                          DropdownMenuItem(
-                            value: 'Sede 1',
-                            child: Text(
-                              'Sede 1',
-                              style: GoogleFonts.montserrat(),
-                            ),
-                          ),
-                          DropdownMenuItem(
-                            value: 'Sede 2',
-                            child: Text(
-                              'Sede 2',
-                              style: GoogleFonts.montserrat(),
-                            ),
-                          ),
-                        ],
-                        onChanged: _selectSede,
-                        style: GoogleFonts.montserrat(color: _primaryColor),
-                        icon: Icon(Icons.keyboard_arrow_down,
-                            color: _secondaryColor),
-                        underline: Container(
-                          height: 1,
-                          color: _disabledColor,
-                        ),
-                        isExpanded: true,
-                      ),
-                    ],
-                  ),
-                ),
-                if (_selectedSede != null)
-                  IconButton(
-                    icon: Icon(Icons.clear, color: Colors.redAccent),
-                    onPressed: _clearFilters,
-                    tooltip: 'Limpiar filtros',
-                  ),
-              ],
-            ),
+            _buildSedeFilter(),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildDateFilter() {
+    return Row(
+      children: [
+        Icon(
+          Icons.calendar_today_rounded,
+          color: _secondaryColor,
+          size: 24,
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Filtrar por Fecha',
+                style: GoogleFonts.montserrat(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: Color.fromRGBO(60, 64, 67, 0.6),
+                ),
+              ),
+              const SizedBox(height: 4),
+              InkWell(
+                onTap: () => _selectDate(context),
+                child: Text(
+                  _selectedDate == null
+                      ? 'Todas las fechas'
+                      : DateFormat('EEEE d MMMM, yyyy', 'es')
+                          .format(_selectedDate!),
+                  style: GoogleFonts.montserrat(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: _primaryColor,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        if (_selectedDate != null)
+          IconButton(
+            icon: Icon(Icons.clear, color: Colors.redAccent),
+            onPressed: _clearFilters,
+            tooltip: 'Limpiar filtros',
+          ),
+      ],
+    );
+  }
+
+  Widget _buildSedeFilter() {
+    return Row(
+      children: [
+        Icon(
+          Icons.store,
+          color: _secondaryColor,
+          size: 24,
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Filtrar por Sede',
+                style: GoogleFonts.montserrat(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: Color.fromRGBO(60, 64, 67, 0.6),
+                ),
+              ),
+              const SizedBox(height: 4),
+              DropdownButton<String>(
+                value: _selectedSede,
+                hint: Text(
+                  'Todas las sedes',
+                  style: GoogleFonts.montserrat(
+                    color: _primaryColor,
+                  ),
+                ),
+                items: [
+                  DropdownMenuItem(
+                    value: null,
+                    child: Text(
+                      'Todas las sedes',
+                      style: GoogleFonts.montserrat(),
+                    ),
+                  ),
+                  DropdownMenuItem(
+                    value: 'Sede 1',
+                    child: Text(
+                      'Sede 1',
+                      style: GoogleFonts.montserrat(),
+                    ),
+                  ),
+                  DropdownMenuItem(
+                    value: 'Sede 2',
+                    child: Text(
+                      'Sede 2',
+                      style: GoogleFonts.montserrat(),
+                    ),
+                  ),
+                ],
+                onChanged: _selectSede,
+                style: GoogleFonts.montserrat(color: _primaryColor),
+                icon: Icon(Icons.keyboard_arrow_down, color: _secondaryColor),
+                underline: Container(
+                  height: 1,
+                  color: _disabledColor,
+                ),
+                isExpanded: true,
+              ),
+            ],
+          ),
+        ),
+        if (_selectedSede != null)
+          IconButton(
+            icon: Icon(Icons.clear, color: Colors.redAccent),
+            onPressed: _clearFilters,
+            tooltip: 'Limpiar filtros',
+          ),
+      ],
     );
   }
 
@@ -558,12 +633,12 @@ class EncargadoRegistroReservasScreenState
             DataColumn(label: Text('Confirmada')),
             DataColumn(label: Text('Acciones')),
           ],
-          rows: _reservas.asMap().entries.map((entry) {
-            final reserva = entry.value;
+          rows: _reservas.map((reserva) {
             final montoRestante = reserva.montoTotal - reserva.montoPagado;
             final confirmacionText = reserva.confirmada ? 'Sí' : 'No';
             final confirmacionColor =
                 reserva.confirmada ? _reservedColor : Colors.redAccent;
+
             return DataRow(
               cells: [
                 DataCell(
@@ -639,6 +714,7 @@ class EncargadoRegistroReservasScreenState
         final confirmacionText = reserva.confirmada ? 'Sí' : 'No';
         final confirmacionColor =
             reserva.confirmada ? _reservedColor : Colors.redAccent;
+
         return Animate(
           effects: [
             FadeEffect(
