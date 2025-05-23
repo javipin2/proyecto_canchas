@@ -23,7 +23,9 @@ exports.assignEncargadoRole = functions.https.onCall(async (data, context) => {
 
   try {
     await admin.auth().setCustomUserClaims(userId, { role: "encargado" });
-    return { message: `Rol de encargado asignado al usuario ${userId}` };
+    return {
+      message: `Rol de encargado asignado al usuario ${userId}`,
+    };
   } catch (error) {
     throw new functions.https.HttpsError(
       "internal",
