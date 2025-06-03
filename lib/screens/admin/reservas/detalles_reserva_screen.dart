@@ -45,10 +45,12 @@ class DetallesReservaScreenState extends State<DetallesReservaScreen>
     _telefonoController =
         TextEditingController(text: widget.reserva.telefono ?? '');
     _emailController = TextEditingController(text: widget.reserva.email ?? '');
+    // Calcular el monto total dinámico basado en la fecha y horario
+    final initialMontoTotal = _calcularMontoTotal(widget.reserva);
     _montoTotalController =
-        TextEditingController(text: widget.reserva.montoTotal.toStringAsFixed(0));
-    _montoPagadoController =
-        TextEditingController(text: widget.reserva.montoPagado.toStringAsFixed(0));
+        TextEditingController(text: initialMontoTotal.toStringAsFixed(0));
+    _montoPagadoController = TextEditingController(
+        text: widget.reserva.montoPagado.toStringAsFixed(0));
     _selectedTipo = widget.reserva.tipoAbono;
 
     _fadeController = AnimationController(
@@ -69,6 +71,16 @@ class DetallesReservaScreenState extends State<DetallesReservaScreen>
     _montoPagadoController.dispose();
     _fadeController.dispose();
     super.dispose();
+  }
+
+  // Método para calcular el monto total dinámico
+  double _calcularMontoTotal(Reserva reserva) {
+    final String day =
+        DateFormat('EEEE', 'es').format(reserva.fecha).toLowerCase();
+    final horaStr = '${reserva.horario.hora.hour}:00';
+    final precio = reserva.cancha.preciosPorHorario[day]?[horaStr] ??
+        reserva.cancha.precio;
+    return precio;
   }
 
   Future<void> _saveChanges() async {
@@ -94,10 +106,10 @@ class DetallesReservaScreenState extends State<DetallesReservaScreen>
     }
 
     try {
-      double montoTotal =
-          double.tryParse(_montoTotalController.text) ?? widget.reserva.montoTotal;
-      double montoPagado =
-          double.tryParse(_montoPagadoController.text) ?? widget.reserva.montoPagado;
+      double montoTotal = double.tryParse(_montoTotalController.text) ??
+          _calcularMontoTotal(_currentReserva);
+      double montoPagado = double.tryParse(_montoPagadoController.text) ??
+          _currentReserva.montoPagado;
 
       // Validar que el abono no exceda el monto total ni sea menor al mínimo (20000)
       if (montoPagado < 20000) {
@@ -716,7 +728,8 @@ class DetallesReservaScreenState extends State<DetallesReservaScreen>
                         if (abono < 20000) {
                           return 'El abono debe ser al menos 20000';
                         }
-                        double? montoTotal = double.tryParse(_montoTotalController.text);
+                        double? montoTotal =
+                            double.tryParse(_montoTotalController.text);
                         if (montoTotal == null) {
                           return 'El valor total no es válido';
                         }

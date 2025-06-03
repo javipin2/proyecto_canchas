@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
@@ -7,11 +8,12 @@ import '../models/horario.dart';
 import '../providers/sede_provider.dart';
 import 'detalles_screen.dart';
 import '../main.dart';
+import 'dart:async';
 
 class HorariosScreen extends StatefulWidget {
   final Cancha cancha;
 
-  const HorariosScreen({Key? key, required this.cancha}) : super(key: key);
+  const HorariosScreen({super.key, required this.cancha});
 
   @override
   State<HorariosScreen> createState() => _HorariosScreenState();
@@ -22,15 +24,16 @@ class _HorariosScreenState extends State<HorariosScreen>
   DateTime _selectedDate = DateTime.now();
   List<Horario> horarios = [];
   bool _isLoading = false;
+  bool _calendarExpanded = false;
+  // Mapa para almacenar QuerySnapshots en memoria (no persistente)
+  final Map<String, QuerySnapshot> _reservasSnapshots = {};
+  Timer? _debounceTimer;
 
   // Controladores para animaciones
   late AnimationController _fadeController;
   late Animation<double> _fadeAnimation;
   late AnimationController _slideController;
   late Animation<Offset> _slideAnimation;
-
-  // Estado del calendario
-  bool _calendarExpanded = false;
 
   @override
   void initState() {
@@ -74,12 +77,12 @@ class _HorariosScreenState extends State<HorariosScreen>
     routeObserver.unsubscribe(this);
     _fadeController.dispose();
     _slideController.dispose();
+    _debounceTimer?.cancel();
     super.dispose();
   }
 
   @override
   void didPopNext() {
-    print('🔄 Volviendo a HorariosScreen - Recargando horarios');
     _loadHorarios();
   }
 
@@ -90,28 +93,46 @@ class _HorariosScreenState extends State<HorariosScreen>
       _isLoading = true;
     });
 
-    try {
-      final sedeProvider = Provider.of<SedeProvider>(context, listen: false);
-      final sedeSeleccionada = sedeProvider.sede;
+    // Cancelar cualquier debounce pendiente
+    _debounceTimer?.cancel();
 
-      print(
-          '📱 Cargando horarios para: ${widget.cancha.nombre} en $sedeSeleccionada (${DateFormat('yyyy-MM-dd').format(_selectedDate)})');
+    // Crear una clave única para el QuerySnapshot
+    final sedeProvider = Provider.of<SedeProvider>(context, listen: false);
+    final sedeSeleccionada = sedeProvider.sede;
+    final snapshotKey =
+        '${DateFormat('yyyy-MM-dd').format(_selectedDate)}_${widget.cancha.id}_$sedeSeleccionada';
+
+    try {
+      QuerySnapshot? reservasSnapshot = _reservasSnapshots[snapshotKey];
+
+      // Si no tenemos el snapshot, obtenerlo de Firestore
+      if (reservasSnapshot == null) {
+        reservasSnapshot = await FirebaseFirestore.instance
+            .collection('reservas')
+            .where('fecha',
+                isEqualTo: DateFormat('yyyy-MM-dd').format(_selectedDate))
+            .where('cancha_id', isEqualTo: widget.cancha.id)
+            .where('sede', isEqualTo: sedeSeleccionada)
+            .get();
+        _reservasSnapshots[snapshotKey] = reservasSnapshot;
+      }
+
+      if (!mounted) return;
 
       final nuevosHorarios = await Horario.generarHorarios(
         fecha: _selectedDate,
         canchaId: widget.cancha.id,
         sede: sedeSeleccionada,
+        reservasSnapshot: reservasSnapshot,
       );
 
       if (!mounted) return;
 
-      print('✅ Horarios cargados: ${nuevosHorarios.length}');
       setState(() {
         horarios = nuevosHorarios;
         _isLoading = false;
       });
     } catch (e) {
-      print('❌ Error al cargar horarios: $e');
       if (!mounted) return;
 
       setState(() {
@@ -158,19 +179,17 @@ class _HorariosScreenState extends State<HorariosScreen>
         _selectedDate = selectedDay;
         horarios.clear();
         _isLoading = true;
-        _calendarExpanded = false; // Ocultar calendario después de seleccionar
+        _calendarExpanded = false;
       });
 
-      print(
-          '📅 Fecha cambiada a: ${DateFormat('yyyy-MM-dd').format(_selectedDate)}');
-      _loadHorarios();
+      // Implementar debouncing para retrasar la consulta
+      _debounceTimer?.cancel();
+      _debounceTimer = Timer(const Duration(milliseconds: 300), _loadHorarios);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final sedeProvider = Provider.of<SedeProvider>(context);
-
     return Container(
       decoration: const BoxDecoration(
         gradient: LinearGradient(
@@ -222,7 +241,10 @@ class _HorariosScreenState extends State<HorariosScreen>
               ),
               child: IconButton(
                 icon: const Icon(Icons.refresh, color: Color(0xFF424242)),
-                onPressed: _loadHorarios,
+                onPressed: () {
+                  _reservasSnapshots.clear(); // Forzar recarga
+                  _loadHorarios();
+                },
                 tooltip: 'Actualizar horarios',
               ),
             ),
@@ -263,7 +285,7 @@ class _HorariosScreenState extends State<HorariosScreen>
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withAlpha(13),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -280,6 +302,7 @@ class _HorariosScreenState extends State<HorariosScreen>
               width: 70,
               height: 70,
               fit: BoxFit.cover,
+              cacheWidth: 140, // Reducir tamaño en memoria
               errorBuilder: (context, error, stackTrace) {
                 return Container(
                   width: 70,
@@ -302,16 +325,6 @@ class _HorariosScreenState extends State<HorariosScreen>
                     fontSize: 18,
                     fontWeight: FontWeight.w600,
                     color: Colors.grey.shade800,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  NumberFormat.currency(symbol: '\$', decimalDigits: 0)
-                      .format(widget.cancha.precio),
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.green.shade700,
                   ),
                 ),
                 const SizedBox(height: 4),
@@ -385,7 +398,7 @@ class _HorariosScreenState extends State<HorariosScreen>
           borderRadius: BorderRadius.circular(14),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.05),
+              color: Colors.black.withAlpha(13),
               blurRadius: 10,
               offset: const Offset(0, 2),
             ),
@@ -445,49 +458,50 @@ class _HorariosScreenState extends State<HorariosScreen>
   Widget _buildCalendar() {
     return Container(
       margin: const EdgeInsets.only(top: 8),
-      constraints: BoxConstraints(
-        maxHeight: MediaQuery.of(context).size.height *
-            0.4, // Máximo 40% de la pantalla
-      ),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withAlpha(13),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
         ],
       ),
       child: SingleChildScrollView(
-        child: TableCalendar(
-          firstDay: DateTime.now(),
-          lastDay: DateTime.now().add(const Duration(days: 30)),
-          focusedDay: _selectedDate,
-          selectedDayPredicate: (day) => isSameDay(_selectedDate, day),
-          onDaySelected: _onDaySelected,
-          calendarStyle: CalendarStyle(
-            todayDecoration: BoxDecoration(
-              color: Colors.green.withOpacity(0.5),
-              shape: BoxShape.circle,
-            ),
-            selectedDecoration: const BoxDecoration(
-              color: Colors.green,
-              shape: BoxShape.circle,
-            ),
-            outsideDaysVisible: false,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            minHeight: MediaQuery.of(context).size.height * 0.4,
           ),
-          headerStyle: HeaderStyle(
-            formatButtonVisible: false,
-            titleCentered: true,
-            titleTextStyle: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-              color: Colors.grey.shade800,
+          child: TableCalendar(
+            firstDay: DateTime.now(),
+            lastDay: DateTime.now().add(const Duration(days: 30)),
+            focusedDay: _selectedDate,
+            selectedDayPredicate: (day) => isSameDay(_selectedDate, day),
+            onDaySelected: _onDaySelected,
+            calendarStyle: CalendarStyle(
+              todayDecoration: BoxDecoration(
+                color: Colors.green.withAlpha(128),
+                shape: BoxShape.circle,
+              ),
+              selectedDecoration: const BoxDecoration(
+                color: Colors.green,
+                shape: BoxShape.circle,
+              ),
+              outsideDaysVisible: false,
             ),
+            headerStyle: HeaderStyle(
+              formatButtonVisible: false,
+              titleCentered: true,
+              titleTextStyle: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: Colors.grey.shade800,
+              ),
+            ),
+            availableCalendarFormats: const {CalendarFormat.month: 'Mes'},
           ),
-          availableCalendarFormats: const {CalendarFormat.month: 'Mes'},
         ),
       ),
     );
@@ -584,7 +598,10 @@ class _HorariosScreenState extends State<HorariosScreen>
               ),
               const SizedBox(height: 16),
               ElevatedButton.icon(
-                onPressed: _loadHorarios,
+                onPressed: () {
+                  _reservasSnapshots.clear(); // Forzar recarga
+                  _loadHorarios();
+                },
                 icon: const Icon(Icons.refresh_outlined),
                 label: const Text('Actualizar'),
                 style: ElevatedButton.styleFrom(
@@ -611,22 +628,29 @@ class _HorariosScreenState extends State<HorariosScreen>
           crossAxisCount: 3,
           crossAxisSpacing: 12,
           mainAxisSpacing: 12,
-          childAspectRatio: 1.8,
+          childAspectRatio: 1.5,
         ),
         physics: const BouncingScrollPhysics(),
         itemCount: horarios.length,
         itemBuilder: (context, index) {
           final horario = horarios[index];
-          final sedeProvider =
-              Provider.of<SedeProvider>(context, listen: false);
-
-          return _buildHorarioCard(horario, sedeProvider.sede);
+          return _buildHorarioCard(
+              horario, Provider.of<SedeProvider>(context, listen: false).sede);
         },
       ),
     );
   }
 
   Widget _buildHorarioCard(Horario horario, String sede) {
+    // Calcular el precio dinámico para esta hora y día seleccionado
+    final String day =
+        DateFormat('EEEE', 'es').format(_selectedDate).toLowerCase();
+    final String horaStr = '${horario.hora.hour}:00';
+    final Map<String, double>? dayPrices = widget.cancha.preciosPorHorario[day];
+    final double precio = dayPrices != null && dayPrices.containsKey(horaStr)
+        ? dayPrices[horaStr] ?? widget.cancha.precio
+        : widget.cancha.precio;
+
     return AnimatedBuilder(
       animation: _fadeController,
       builder: (context, child) {
@@ -657,7 +681,7 @@ class _HorariosScreenState extends State<HorariosScreen>
                     ),
                   ).then((reservaRealizada) {
                     if (reservaRealizada == true) {
-                      print('🎯 Reserva realizada - Actualizando horarios');
+                      _reservasSnapshots.clear(); // Forzar recarga tras reserva
                       _loadHorarios();
                     }
                   });
@@ -678,7 +702,7 @@ class _HorariosScreenState extends State<HorariosScreen>
             boxShadow: horario.disponible
                 ? [
                     BoxShadow(
-                      color: Colors.green.withOpacity(0.1),
+                      color: Colors.green.withAlpha(26),
                       blurRadius: 5,
                       offset: const Offset(0, 2),
                     ),
@@ -693,6 +717,18 @@ class _HorariosScreenState extends State<HorariosScreen>
                   horario.horaFormateada,
                   style: TextStyle(
                     fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: horario.disponible
+                        ? Colors.green.shade700
+                        : Colors.grey.shade400,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  NumberFormat.currency(symbol: '\$', decimalDigits: 0)
+                      .format(precio),
+                  style: TextStyle(
+                    fontSize: 12,
                     fontWeight: FontWeight.w600,
                     color: horario.disponible
                         ? Colors.green.shade700

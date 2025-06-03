@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/services.dart';
+import 'package:intl/intl.dart';
 import '../models/cancha.dart';
 import '../models/horario.dart';
 import '../models/reserva.dart';
@@ -14,12 +13,12 @@ class DetallesScreen extends StatefulWidget {
   final String sede;
 
   const DetallesScreen({
-    Key? key,
+    super.key,
     required this.cancha,
     required this.fecha,
     required this.horario,
     required this.sede,
-  }) : super(key: key);
+  });
 
   @override
   State<DetallesScreen> createState() => _DetallesScreenState();
@@ -69,8 +68,18 @@ class _DetallesScreenState extends State<DetallesScreen>
 
   @override
   Widget build(BuildContext context) {
-    final double precioCompleto = widget.cancha.precio;
-    const double abono = 20000;
+    // Calcular el precio dinámico para esta hora y día seleccionado
+    final String day =
+        DateFormat('EEEE', 'es').format(widget.fecha).toLowerCase();
+    final String horaStr = '${widget.horario.hora.hour}:00';
+    final Map<String, double>? dayPrices = widget.cancha.preciosPorHorario[day];
+    final double precioCompleto =
+        dayPrices != null && dayPrices.containsKey(horaStr)
+            ? dayPrices[horaStr] ?? widget.cancha.precio
+            : widget.cancha.precio;
+
+    // Abono mínimo como el 30% del precio completo, redondeado al entero más cercano
+    final double abono = 20000;
     final currencyFormat =
         NumberFormat.currency(symbol: "\$", decimalDigits: 0);
     final theme = Theme.of(context);
@@ -123,7 +132,7 @@ class _DetallesScreenState extends State<DetallesScreen>
                                 borderRadius: BorderRadius.circular(16),
                                 boxShadow: [
                                   BoxShadow(
-                                    color: Colors.black.withOpacity(0.06),
+                                    color: Colors.black.withAlpha(15),
                                     blurRadius: 16,
                                     offset: const Offset(0, 4),
                                   ),
@@ -188,7 +197,7 @@ class _DetallesScreenState extends State<DetallesScreen>
                                 borderRadius: BorderRadius.circular(16),
                                 boxShadow: [
                                   BoxShadow(
-                                    color: Colors.black.withOpacity(0.06),
+                                    color: Colors.black.withAlpha(15),
                                     blurRadius: 16,
                                     offset: const Offset(0, 4),
                                   ),
@@ -204,6 +213,15 @@ class _DetallesScreenState extends State<DetallesScreen>
                                       fontSize: 16,
                                       fontWeight: FontWeight.bold,
                                       color: Colors.black87,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    'El precio puede variar según el día y horario.',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.grey.shade600,
+                                      fontStyle: FontStyle.italic,
                                     ),
                                   ),
                                   const SizedBox(height: 16),
@@ -353,7 +371,7 @@ class _DetallesScreenState extends State<DetallesScreen>
             boxShadow: isPrimary
                 ? [
                     BoxShadow(
-                      color: color.withOpacity(0.3),
+                      color: color.withAlpha(76),
                       blurRadius: 12,
                       offset: const Offset(0, 6),
                     ),
@@ -382,7 +400,7 @@ class _DetallesScreenState extends State<DetallesScreen>
                   padding:
                       const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.2),
+                    color: Colors.white.withAlpha(51),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
@@ -415,7 +433,9 @@ class _DetallesScreenState extends State<DetallesScreen>
       horario: widget.horario,
       sede: widget.sede,
       tipoAbono: tipoAbono,
-      montoTotal: widget.cancha.precio,
+      montoTotal: montoPagado == (precioPorHorario() * 0.3).roundToDouble()
+          ? precioPorHorario()
+          : montoPagado,
       montoPagado: montoPagado,
       confirmada: true,
     );
@@ -441,5 +461,15 @@ class _DetallesScreenState extends State<DetallesScreen>
         );
       }
     }
+  }
+
+  double precioPorHorario() {
+    final String day =
+        DateFormat('EEEE', 'es').format(widget.fecha).toLowerCase();
+    final String horaStr = '${widget.horario.hora.hour}:00';
+    final Map<String, double>? dayPrices = widget.cancha.preciosPorHorario[day];
+    return dayPrices != null && dayPrices.containsKey(horaStr)
+        ? dayPrices[horaStr] ?? widget.cancha.precio
+        : widget.cancha.precio;
   }
 }

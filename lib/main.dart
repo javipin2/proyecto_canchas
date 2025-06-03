@@ -3,7 +3,7 @@ import 'package:provider/provider.dart';
 import 'providers/sede_provider.dart';
 import 'providers/reserva_provider.dart';
 import 'providers/cancha_provider.dart';
-import 'screens/splash_screen.dart'; 
+import 'screens/splash_screen.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'package:intl/date_symbol_data_local.dart';

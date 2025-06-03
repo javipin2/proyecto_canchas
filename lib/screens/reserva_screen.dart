@@ -2,7 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:http/http.dart' as http;
+import 'package:crypto/crypto.dart';
+import 'dart:convert';
+import 'dart:async';
 import '../models/reserva.dart';
+import 'package:flutter/foundation.dart';
 
 class ReservaScreen extends StatefulWidget {
   final Reserva reserva;
@@ -25,6 +31,15 @@ class _ReservaScreenState extends State<ReservaScreen>
   late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideAnimation;
   double _montoPagado = 0;
+
+  // Para el polling automático
+  Timer? _pollingTimer;
+  String? _referenciaActual;
+  int _intentosVerificacion = 0;
+  static const int _maxIntentos =
+      20; // 5 minutos de verificación (cada 15 segundos)
+
+  StreamSubscription? _cancelacionListener;
 
   @override
   void initState() {
@@ -57,6 +72,476 @@ class _ReservaScreenState extends State<ReservaScreen>
     _animationController.forward();
   }
 
+  // Función para generar la signature según Wompi
+  String generarSignature({
+    required String publicKey,
+    required String currency,
+    required int amountInCents,
+    required String reference,
+    required String redirectUrl,
+    required String integrityKey,
+  }) {
+    final concatenatedString =
+        reference + amountInCents.toString() + currency + integrityKey;
+    final bytes = utf8.encode(concatenatedString);
+    final digest = sha256.convert(bytes);
+    return digest.toString();
+  }
+
+  // Función mejorada para verificar el pago con Wompi
+  Future<Map<String, dynamic>> verificarPagoWompi(String referencia) async {
+    const String privateKey = 'prv_test_t3jvXlYXPYuX037eGKw5mnb8RgaF2pv6';
+    final url = Uri.parse(
+        'https://sandbox.wompi.co/v1/transactions?reference=$referencia');
+
+    try {
+      final response = await http.get(
+        url,
+        headers: {
+          'Authorization': 'Bearer $privateKey',
+          'Content-Type': 'application/json',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        Map<String, dynamic> data = jsonDecode(response.body);
+        if (data['data'] != null && data['data'].isNotEmpty) {
+          String status = data['data'][0]['status'];
+          String? paymentMethod = data['data'][0]['payment_method']?['type'];
+          int? amountInCents = data['data'][0]['amount_in_cents'];
+
+          return {
+            'success': true,
+            'approved': status == 'APPROVED',
+            'status': status,
+            'paymentMethod': paymentMethod,
+            'amount': amountInCents != null ? amountInCents / 100 : 0,
+            'transactionId': data['data'][0]['id'],
+          };
+        }
+        return {'success': false, 'approved': false, 'status': 'NOT_FOUND'};
+      } else {
+        return {'success': false, 'approved': false, 'status': 'API_ERROR'};
+      }
+    } catch (e) {
+      return {
+        'success': false,
+        'approved': false,
+        'status': 'NETWORK_ERROR',
+        'error': e.toString()
+      };
+    }
+  }
+
+  // Función para iniciar el pago con Wompi
+  Future<void> lanzarPagoWompi({
+    required int valorEnPesos,
+    required String referencia,
+  }) async {
+    const String publicKey = 'pub_test_n70HxI2m02sZTLceWsSxORBaJlXp8yt3';
+    const String integrityKey =
+        'test_integrity_ZCHK5nvlL3ewTstrwRj7OVqdB4EgIUrn';
+    final int valorEnCentavos = valorEnPesos * 100;
+    const String redirectUrl = 'https://proyecto-20bae.web.app/';
+    const String currency = 'COP';
+
+    final signature = generarSignature(
+      publicKey: publicKey,
+      currency: currency,
+      amountInCents: valorEnCentavos,
+      reference: referencia,
+      redirectUrl: redirectUrl,
+      integrityKey: integrityKey,
+    );
+
+    final baseUrl = 'https://checkout.wompi.co/p/';
+    final params = {
+      'public-key': publicKey,
+      'currency': currency,
+      'amount-in-cents': valorEnCentavos.toString(),
+      'reference': referencia,
+      'redirect-url': redirectUrl,
+      'signature:integrity': signature,
+    };
+
+    final queryString = params.entries
+        .map((e) =>
+            '${Uri.encodeComponent(e.key)}=${Uri.encodeComponent(e.value)}')
+        .join('&');
+
+    final fullUrl = '$baseUrl?$queryString';
+    final url = Uri.parse(fullUrl);
+
+    try {
+      if (await canLaunchUrl(url)) {
+        await launchUrl(url, mode: LaunchMode.externalApplication);
+
+        // Iniciar verificación automática
+        _iniciarVerificacionAutomatica(referencia);
+      } else {
+        throw 'No se pudo abrir el navegador';
+      }
+    } catch (e) {
+      if (mounted) {
+        _mostrarError('Error al iniciar el pago: $e');
+        setState(() {
+          _procesando = false;
+        });
+      }
+    }
+  }
+
+  // Nueva función para verificación automática con polling
+  void _iniciarVerificacionAutomatica(String referencia) {
+    _referenciaActual = referencia;
+    _intentosVerificacion = 0;
+
+    if (mounted) {
+      _mostrarDialogoVerificacionAutomatica();
+    }
+
+    // Actualizar el documento temporal
+    _crearDocumentoTemporalReserva(referencia);
+
+    // LISTENER MÁS ESPECÍFICO - Solo escucha cambios relevantes
+    _cancelacionListener = FirebaseFirestore.instance
+        .collection('reservas_temporales')
+        .doc(referencia)
+        .snapshots()
+        .listen((doc) {
+      if (!mounted) return;
+
+      if (doc.exists) {
+        final data = doc.data() as Map<String, dynamic>?;
+        final estado = data?['estado'];
+
+        if (estado == 'cancelado_por_otro_pago') {
+          _pollingTimer?.cancel();
+          _cancelacionListener?.cancel();
+          _mostrarPagoCancelado();
+        }
+      }
+    });
+
+    // Polling para verificar el pago
+    _pollingTimer = Timer.periodic(const Duration(seconds: 15), (timer) async {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+
+      _intentosVerificacion++;
+
+      try {
+        final resultado = await verificarPagoWompi(referencia);
+
+        if (resultado['approved'] == true) {
+          timer.cancel();
+          _cancelacionListener?.cancel();
+          await _procesarPagoExitoso(resultado);
+        } else if (resultado['status'] == 'DECLINED') {
+          timer.cancel();
+          _cancelacionListener?.cancel();
+          await _liberarBloqueo(referencia);
+          _mostrarPagoRechazado();
+        } else if (_intentosVerificacion >= _maxIntentos) {
+          timer.cancel();
+          _cancelacionListener?.cancel();
+          await _liberarBloqueo(referencia);
+          _mostrarTimeoutVerificacion();
+        }
+      } catch (e) {
+        print('Error en verificación automática: $e');
+      }
+    });
+  }
+
+  // Crear documento temporal para tracking
+  Future<void> _crearDocumentoTemporalReserva(String referencia) async {
+    try {
+      // Solo actualizar el estado de 'bloqueado' a 'pendiente'
+      await FirebaseFirestore.instance
+          .collection('reservas_temporales')
+          .doc(referencia)
+          .update({
+        'estado': 'pendiente',
+        'pago_iniciado': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      print('Error al actualizar documento temporal: $e');
+    }
+  }
+
+  // Procesar pago exitoso automáticamente
+  Future<void> _procesarPagoExitoso(Map<String, dynamic> resultadoPago) async {
+    try {
+      final String canchaNombre = widget.reserva.cancha.nombre;
+      final String fecha =
+          DateFormat('yyyy-MM-dd').format(widget.reserva.fecha);
+      final String horario = widget.reserva.horario.horaFormateada;
+      final String reservaKey = '${canchaNombre}_${fecha}_${horario}';
+
+      // Actualizar documento temporal actual como pagado
+      await FirebaseFirestore.instance
+          .collection('reservas_temporales')
+          .doc(_referenciaActual!)
+          .update({
+        'estado': 'pagado',
+        'transaction_id': resultadoPago['transactionId'],
+        'payment_method': resultadoPago['paymentMethod'],
+        'processed_at': FieldValue.serverTimestamp(),
+      });
+
+      // CANCELAR TODOS LOS OTROS INTENTOS DE PAGO - CONSULTA OPTIMIZADA
+      final QuerySnapshot otrosBloqueos = await FirebaseFirestore.instance
+          .collection('reservas_temporales')
+          .where('reserva_key', isEqualTo: reservaKey)
+          .get();
+
+      // Procesar cancelaciones en lote para mejor performance
+      WriteBatch batch = FirebaseFirestore.instance.batch();
+
+      for (QueryDocumentSnapshot doc in otrosBloqueos.docs) {
+        if (doc.id != _referenciaActual) {
+          final data = doc.data() as Map<String, dynamic>;
+          final estado = data['estado'];
+
+          // Solo cancelar estados activos
+          if (estado == 'bloqueado' || estado == 'pendiente') {
+            batch.update(doc.reference, {
+              'estado': 'cancelado_por_otro_pago',
+              'cancelado_en': FieldValue.serverTimestamp(),
+              'motivo_cancelacion': 'Otro usuario completó el pago primero',
+            });
+          }
+        }
+      }
+
+      // Ejecutar todas las cancelaciones de una vez
+      await batch.commit();
+
+      // Guardar reserva definitiva
+      await _guardarReservaFinal();
+    } catch (e) {
+      print('Error al procesar pago exitoso: $e');
+      if (mounted) {
+        _mostrarError('Error al procesar el pago: $e');
+      }
+    }
+  }
+
+  // Guardar reserva final
+  Future<void> _guardarReservaFinal() async {
+    // Actualizar los datos de la reserva
+    widget.reserva.nombre = _nombreController.text;
+    widget.reserva.telefono = _telefonoController.text;
+    widget.reserva.email = _emailController.text;
+    widget.reserva.montoPagado = _montoPagado;
+    widget.reserva.tipoAbono = _montoPagado >= widget.reserva.montoTotal
+        ? TipoAbono.completo
+        : TipoAbono.parcial;
+    widget.reserva.confirmada = true;
+
+    try {
+      // Guardar reserva confirmada
+      await FirebaseFirestore.instance
+          .collection('reservas')
+          .add(widget.reserva.toFirestore());
+
+      // Eliminar documento temporal
+      if (_referenciaActual != null) {
+        await FirebaseFirestore.instance
+            .collection('reservas_temporales')
+            .doc(_referenciaActual!)
+            .delete();
+      }
+
+      if (!mounted) return;
+
+      // Cerrar diálogo y mostrar éxito
+      Navigator.of(context).pop(); // Cerrar diálogo de verificación
+
+      _mostrarExito();
+
+      // Navegar de vuelta después de un momento
+      Future.delayed(const Duration(seconds: 2), () {
+        if (mounted) {
+          Navigator.popUntil(context, (route) => route.isFirst);
+        }
+      });
+    } catch (e) {
+      if (mounted) {
+        Navigator.of(context).pop(); // Cerrar diálogo
+        _mostrarError('Error al guardar la reserva: $e');
+      }
+    }
+  }
+
+  // Diálogos y mensajes mejorados
+  void _mostrarDialogoVerificacionAutomatica() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Row(
+            children: [
+              SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
+                ),
+              ),
+              const SizedBox(width: 12),
+              const Text('Verificando Pago'),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Estamos verificando tu pago automáticamente.\nTu reserva se confirmará en cuanto el pago sea procesado.',
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Referencia: ${_referenciaActual ?? ""}',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey[600],
+                  fontFamily: 'monospace',
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                _pollingTimer?.cancel();
+                Navigator.of(context).pop();
+                setState(() {
+                  _procesando = false;
+                });
+              },
+              child: const Text('Cancelar'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _mostrarPagoRechazado() {
+    if (!mounted) return;
+    Navigator.of(context).pop(); // Cerrar diálogo de verificación
+
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Row(
+            children: [
+              Icon(Icons.error_outline, color: Colors.red),
+              const SizedBox(width: 8),
+              const Text('Pago Rechazado'),
+            ],
+          ),
+          content: const Text(
+            'Tu pago ha sido rechazado. Por favor, intenta nuevamente con otra forma de pago.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                setState(() {
+                  _procesando = false;
+                });
+              },
+              child: const Text('Entendido'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _mostrarTimeoutVerificacion() {
+    if (!mounted) return;
+    Navigator.of(context).pop(); // Cerrar diálogo de verificación
+
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Row(
+            children: [
+              Icon(Icons.access_time, color: Colors.orange),
+              const SizedBox(width: 8),
+              const Text('Verificación Pausada'),
+            ],
+          ),
+          content: const Text(
+            'La verificación automática ha sido pausada. Si completaste el pago, tu reserva se procesará en breve. Puedes contactarnos si tienes dudas.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                setState(() {
+                  _procesando = false;
+                });
+              },
+              child: const Text('Entendido'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _mostrarExito() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: const [
+            Icon(Icons.check_circle_outline, color: Colors.white),
+            SizedBox(width: 10),
+            Expanded(child: Text("¡Reserva confirmada automáticamente!")),
+          ],
+        ),
+        backgroundColor: Colors.green.shade700,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+        ),
+        margin: const EdgeInsets.all(10),
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
+
+  void _mostrarError(String mensaje) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(Icons.error_outline, color: Colors.white),
+            const SizedBox(width: 10),
+            Expanded(child: Text(mensaje)),
+          ],
+        ),
+        backgroundColor: Colors.red.shade700,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+        ),
+        margin: const EdgeInsets.all(10),
+      ),
+    );
+  }
+
   Future<void> _confirmarReserva() async {
     if (!mounted) return;
     if (_formKey.currentState!.validate()) {
@@ -66,66 +551,38 @@ class _ReservaScreenState extends State<ReservaScreen>
 
       HapticFeedback.mediumImpact();
 
-      widget.reserva.nombre = _nombreController.text;
-      widget.reserva.telefono = _telefonoController.text;
-      widget.reserva.email = _emailController.text;
-      widget.reserva.montoPagado = _montoPagado;
-      widget.reserva.tipoAbono = _montoPagado >= widget.reserva.montoTotal
-          ? TipoAbono.completo
-          : TipoAbono.parcial;
-
       try {
-        await FirebaseFirestore.instance
-            .collection('reservas')
-            .add(widget.reserva.toFirestore());
-
-        if (!mounted) return;
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: const [
-                Icon(Icons.check_circle_outline, color: Colors.white),
-                SizedBox(width: 10),
-                Text("¡Reserva confirmada con éxito!"),
-              ],
-            ),
-            backgroundColor: Colors.green.shade700,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-            margin: const EdgeInsets.all(10),
-          ),
-        );
-
-        Navigator.popUntil(context, (route) => route.isFirst);
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Row(
-                children: [
-                  const Icon(Icons.error_outline, color: Colors.white),
-                  const SizedBox(width: 10),
-                  Text('Error inesperado: $e'),
-                ],
-              ),
-              backgroundColor: Colors.red.shade700,
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              margin: const EdgeInsets.all(10),
-            ),
-          );
-        }
-      } finally {
-        if (mounted) {
+        // PASO 1: Validar disponibilidad
+        final disponibilidad = await _validarDisponibilidad();
+        if (!disponibilidad['disponible']) {
+          _mostrarError(disponibilidad['mensaje']);
           setState(() {
             _procesando = false;
           });
+          return;
         }
+
+        // PASO 2: Crear bloqueo temporal
+        final String? referencia = await _crearBloqueoTemporal();
+        if (referencia == null) {
+          _mostrarError(
+              'No se pudo procesar la reserva. La cancha puede estar ocupada.');
+          setState(() {
+            _procesando = false;
+          });
+          return;
+        }
+
+        // PASO 3: Iniciar pago con Wompi
+        await lanzarPagoWompi(
+          valorEnPesos: _montoPagado.toInt(),
+          referencia: referencia,
+        );
+      } catch (e) {
+        _mostrarError('Error al procesar la reserva: $e');
+        setState(() {
+          _procesando = false;
+        });
       }
     }
   }
@@ -137,14 +594,254 @@ class _ReservaScreenState extends State<ReservaScreen>
     _emailController.dispose();
     _abonoController.dispose();
     _animationController.dispose();
+    _pollingTimer?.cancel();
+    _cancelacionListener?.cancel(); // AGREGAR ESTA LÍNEA
     super.dispose();
+  }
+
+  // FUNCIÓN 1: VALIDAR DISPONIBILIDAD - AGREGAR DESPUÉS DE dispose()
+  Future<Map<String, dynamic>> _validarDisponibilidad() async {
+    try {
+      final String canchaNombre = widget.reserva.cancha.nombre;
+      final String fecha =
+          DateFormat('yyyy-MM-dd').format(widget.reserva.fecha);
+      final String horario = widget.reserva.horario.horaFormateada;
+
+      // Crear identificador único para la reserva
+      final String reservaKey = '${canchaNombre}_${fecha}_${horario}';
+
+      // Verificar reservas confirmadas primero
+      final QuerySnapshot reservasExistentes = await FirebaseFirestore.instance
+          .collection('reservas')
+          .where('cancha.nombre', isEqualTo: canchaNombre)
+          .where('fecha', isEqualTo: fecha)
+          .where('horario.horaFormateada', isEqualTo: horario)
+          .where('confirmada', isEqualTo: true)
+          .get();
+
+      if (reservasExistentes.docs.isNotEmpty) {
+        return {
+          'disponible': false,
+          'mensaje': 'Esta cancha ya fue reservada por otro usuario'
+        };
+      }
+
+      // Verificar bloqueos temporales - CONSULTA SIMPLIFICADA
+      final DateTime hace5Minutos =
+          DateTime.now().subtract(Duration(minutes: 4));
+
+      // Usar el identificador único para consulta más eficiente
+      final QuerySnapshot reservasTemporales = await FirebaseFirestore.instance
+          .collection('reservas_temporales')
+          .where('reserva_key', isEqualTo: reservaKey)
+          .where('timestamp', isGreaterThan: Timestamp.fromDate(hace5Minutos))
+          .get();
+
+      // Filtrar en el cliente por estados activos
+      final reservasActivas = reservasTemporales.docs.where((doc) {
+        final data = doc.data() as Map<String, dynamic>;
+        final estado = data['estado'];
+        return estado == 'bloqueado' || estado == 'pendiente';
+      }).toList();
+
+      if (reservasActivas.isNotEmpty) {
+        return {
+          'disponible': false,
+          'mensaje':
+              'Otro usuario está procesando el pago para esta cancha en este momento'
+        };
+      }
+
+      return {'disponible': true};
+    } catch (e) {
+      return {
+        'disponible': false,
+        'mensaje': 'Error al verificar disponibilidad: $e'
+      };
+    }
+  }
+
+// FUNCIÓN 2: CREAR BLOQUEO TEMPORAL
+  Future<String?> _crearBloqueoTemporal() async {
+    try {
+      final String referencia =
+          'reserva-${DateTime.now().millisecondsSinceEpoch}';
+      final String canchaNombre = widget.reserva.cancha.nombre;
+      final String fecha =
+          DateFormat('yyyy-MM-dd').format(widget.reserva.fecha);
+      final String horario = widget.reserva.horario.horaFormateada;
+      final String reservaKey = '${canchaNombre}_${fecha}_${horario}';
+
+      await FirebaseFirestore.instance.runTransaction((transaction) async {
+        // Verificar una vez más dentro de la transacción
+        final QuerySnapshot reservasExistentes = await FirebaseFirestore
+            .instance
+            .collection('reservas')
+            .where('cancha.nombre', isEqualTo: canchaNombre)
+            .where('fecha', isEqualTo: fecha)
+            .where('horario.horaFormateada', isEqualTo: horario)
+            .where('confirmada', isEqualTo: true)
+            .get();
+
+        if (reservasExistentes.docs.isNotEmpty) {
+          throw Exception('Cancha ya reservada');
+        }
+
+        // Verificar bloqueos activos con el nuevo campo
+        final QuerySnapshot bloqueosActivos = await FirebaseFirestore.instance
+            .collection('reservas_temporales')
+            .where('reserva_key', isEqualTo: reservaKey)
+            .get();
+
+        // Verificar si hay bloqueos activos
+        final DateTime hace5Minutos =
+            DateTime.now().subtract(Duration(minutes: 4));
+        bool hayBloqueoActivo = false;
+
+        for (var doc in bloqueosActivos.docs) {
+          final data = doc.data() as Map<String, dynamic>;
+          final timestamp = data['timestamp'] as Timestamp?;
+          final estado = data['estado'];
+
+          if (timestamp != null &&
+              timestamp.toDate().isAfter(hace5Minutos) &&
+              (estado == 'bloqueado' || estado == 'pendiente')) {
+            hayBloqueoActivo = true;
+            break;
+          }
+        }
+
+        if (hayBloqueoActivo) {
+          throw Exception('Otro usuario está procesando esta reserva');
+        }
+
+        final DocumentReference docRef = FirebaseFirestore.instance
+            .collection('reservas_temporales')
+            .doc(referencia);
+
+        transaction.set(docRef, {
+          'referencia': referencia,
+          'cancha': canchaNombre,
+          'fecha': fecha,
+          'horario': horario,
+          'reserva_key': reservaKey, // CAMPO CLAVE PARA CONSULTAS EFICIENTES
+          'monto': _montoPagado,
+          'estado': 'bloqueado',
+          'timestamp': FieldValue.serverTimestamp(),
+          'expira_en':
+              DateTime.now().add(Duration(minutes: 4)).millisecondsSinceEpoch,
+          'datos_cliente': {
+            'nombre': _nombreController.text,
+            'telefono': _telefonoController.text,
+            'email': _emailController.text,
+          }
+        });
+      });
+
+      return referencia;
+    } catch (e) {
+      print('Error al crear bloqueo temporal: $e');
+      return null;
+    }
+  }
+
+// FUNCIÓN 3: LIBERAR BLOQUEO
+  Future<void> _liberarBloqueo(String referencia) async {
+    try {
+      await FirebaseFirestore.instance
+          .collection('reservas_temporales')
+          .doc(referencia)
+          .update({
+        'estado': 'expirado',
+        'liberado_en': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      print('Error al liberar bloqueo: $e');
+    }
+  }
+
+// FUNCIÓN 4: DIÁLOGO DE CANCELACIÓN
+  void _mostrarPagoCancelado() {
+    if (!mounted) return;
+    Navigator.of(context).pop(); // Cerrar diálogo de verificación
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Row(
+            children: [
+              Icon(Icons.cancel_outlined, color: Colors.orange, size: 28),
+              const SizedBox(width: 12),
+              const Text('Reserva No Disponible'),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                '¡Oops! Otro usuario completó esta reserva antes que tú.',
+                style: TextStyle(fontSize: 16),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.info_outline,
+                        color: Colors.blue.shade700, size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Tu pago no se procesará y no se te cobrará nada.',
+                        style: TextStyle(
+                          color: Colors.blue.shade700,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                Navigator.of(context).pop(); // Regresar a pantalla anterior
+              },
+              child: const Text('Buscar Otra Cancha'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // Método para calcular el precio total dinámico de la cancha
+  double _calcularPrecioTotalCancha() {
+    final String day =
+        DateFormat('EEEE', 'es').format(widget.reserva.fecha).toLowerCase();
+    final String horaStr = '${widget.reserva.horario.hora.hour}:00';
+    final Map<String, double>? dayPrices =
+        widget.reserva.cancha.preciosPorHorario[day];
+    return dayPrices != null && dayPrices.containsKey(horaStr)
+        ? dayPrices[horaStr] ?? widget.reserva.cancha.precio
+        : widget.reserva.cancha.precio;
   }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final currencyFormat =
         NumberFormat.currency(symbol: "\$", decimalDigits: 0);
+    final double precioTotalCancha = _calcularPrecioTotalCancha();
 
     return Scaffold(
       backgroundColor: Colors.grey[50],
@@ -266,8 +963,7 @@ class _ReservaScreenState extends State<ReservaScreen>
                             children: [
                               _buildInfoItem(
                                 title: 'Precio Total',
-                                value: currencyFormat
-                                    .format(widget.reserva.montoTotal),
+                                value: currencyFormat.format(precioTotalCancha),
                                 icon: Icons.attach_money,
                               ),
                               _buildInfoItem(
@@ -336,13 +1032,13 @@ class _ReservaScreenState extends State<ReservaScreen>
                             label: 'Abono (mínimo 20000)',
                             icon: Icons.attach_money,
                             keyboardType: TextInputType.number,
-                            validatorMsg: 'Por favor ingresa un abono',
+                            validatorMsg: 'Por favor',
                             extraValidation: (value) {
                               final abono = double.tryParse(value ?? '0') ?? 0;
                               if (abono < 20000) {
                                 return 'El abono debe ser al menos 20000';
                               }
-                              if (abono > widget.reserva.montoTotal) {
+                              if (abono > precioTotalCancha) {
                                 return 'El abono no puede superar el precio total';
                               }
                               return null;

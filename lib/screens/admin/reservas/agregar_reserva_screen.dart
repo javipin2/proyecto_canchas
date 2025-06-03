@@ -7,21 +7,21 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../../models/cancha.dart';
 import '../../../models/horario.dart';
 import '../../../models/reserva.dart';
-import '../../../models/cliente.dart'; // Asegúrate de importar el nuevo modelo
+import '../../../models/cliente.dart';
 
 class AgregarReservaScreen extends StatefulWidget {
   final DateTime fecha;
-  final Horario horario;
+  final List<Horario> horarios;
   final Cancha cancha;
   final String sede;
 
   const AgregarReservaScreen({
-    Key? key,
+    super.key,
     required this.fecha,
-    required this.horario,
+    required this.horarios,
     required this.cancha,
     required this.sede,
-  }) : super(key: key);
+  });
 
   @override
   _AgregarReservaScreenState createState() => _AgregarReservaScreenState();
@@ -36,12 +36,10 @@ class _AgregarReservaScreenState extends State<AgregarReservaScreen>
   late TextEditingController _valorController;
   TipoAbono? _selectedTipo;
   bool _isProcessing = false;
-  String? _selectedClienteId; // Para almacenar el ID del cliente seleccionado
+  String? _selectedClienteId;
 
-  // Controladores para animaciones
   late AnimationController _fadeController;
 
-  // Definición de tema de colores
   final Color _primaryColor = const Color(0xFF3C4043);
   final Color _secondaryColor = const Color(0xFF4285F4);
   final Color _backgroundColor = Colors.white;
@@ -54,8 +52,9 @@ class _AgregarReservaScreenState extends State<AgregarReservaScreen>
     _nombreController = TextEditingController();
     _telefonoController = TextEditingController();
     _emailController = TextEditingController();
-    _valorController =
-        TextEditingController(text: widget.cancha.precio.toString());
+    // Calcular el valor total dinámico basado en los horarios y fecha
+    final total = _calcularMontoTotal();
+    _valorController = TextEditingController(text: total.toStringAsFixed(0));
     _selectedTipo = TipoAbono.parcial;
 
     _fadeController = AnimationController(
@@ -77,6 +76,20 @@ class _AgregarReservaScreenState extends State<AgregarReservaScreen>
     super.dispose();
   }
 
+  // Método para calcular el monto total dinámico
+  double _calcularMontoTotal() {
+    final String day =
+        DateFormat('EEEE', 'es').format(widget.fecha).toLowerCase();
+    double total = 0.0;
+    for (final horario in widget.horarios) {
+      final horaStr = '${horario.hora.hour}:00';
+      final precio = widget.cancha.preciosPorHorario[day]?[horaStr] ??
+          widget.cancha.precio;
+      total += precio;
+    }
+    return total;
+  }
+
   Future<void> _crearReserva() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -85,60 +98,69 @@ class _AgregarReservaScreenState extends State<AgregarReservaScreen>
     });
 
     try {
-      Reserva nuevaReserva = Reserva(
-        id: '',
-        cancha: widget.cancha,
-        fecha: widget.fecha,
-        horario: widget.horario,
-        sede: widget.sede,
-        tipoAbono: _selectedTipo!,
-        montoTotal:
-            double.tryParse(_valorController.text) ?? widget.cancha.precio,
-        montoPagado: 0,
-        nombre: _nombreController.text,
-        telefono: _telefonoController.text,
-        email: _emailController.text,
-      );
+      final batch = FirebaseFirestore.instance.batch();
+      for (final horario in widget.horarios) {
+        final reserva = Reserva(
+          id: '',
+          cancha: widget.cancha,
+          fecha: widget.fecha,
+          horario: horario,
+          sede: widget.sede,
+          tipoAbono: _selectedTipo!,
+          montoTotal: _calcularMontoTotal() /
+              widget.horarios.length, // Distribuir el total entre los horarios
+          montoPagado: 0,
+          nombre: _nombreController.text,
+          telefono: _telefonoController.text,
+          email: _emailController.text,
+        );
+        final docRef = FirebaseFirestore.instance.collection('reservas').doc();
+        batch.set(docRef, reserva.toFirestore());
+      }
 
-      await FirebaseFirestore.instance
-          .collection('reservas')
-          .add(nuevaReserva.toFirestore());
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Reserva creada exitosamente.',
-            style: GoogleFonts.montserrat(),
+      await batch.commit();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Se crearon ${widget.horarios.length} reserva${widget.horarios.length > 1 ? 's' : ''} exitosamente.',
+              style: GoogleFonts.montserrat(),
+            ),
+            backgroundColor: _secondaryColor,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+            margin: const EdgeInsets.all(12),
+            duration: const Duration(seconds: 4),
           ),
-          backgroundColor: _secondaryColor,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-          ),
-          margin: const EdgeInsets.all(12),
-          duration: const Duration(seconds: 4),
-        ),
-      );
-      Navigator.of(context).pop(true);
+        );
+        Navigator.of(context).pop(true);
+      }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Error al crear la reserva: $e',
-            style: GoogleFonts.montserrat(),
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Error al crear las reservas: $e',
+              style: GoogleFonts.montserrat(),
+            ),
+            backgroundColor: Colors.redAccent,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+            margin: const EdgeInsets.all(12),
+            duration: const Duration(seconds: 4),
           ),
-          backgroundColor: Colors.redAccent,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-          ),
-          margin: const EdgeInsets.all(12),
-          duration: const Duration(seconds: 4),
-        ),
-      );
+        );
+      }
     } finally {
-      setState(() {
-        _isProcessing = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isProcessing = false;
+        });
+      }
     }
   }
 
@@ -148,7 +170,7 @@ class _AgregarReservaScreenState extends State<AgregarReservaScreen>
         _selectedClienteId = cliente.id;
         _nombreController.text = cliente.nombre;
         _telefonoController.text = cliente.telefono;
-        _emailController.text = cliente.correo ?? ''; // Manejo de nulo
+        _emailController.text = cliente.correo ?? '';
       });
     } else {
       setState(() {
@@ -165,7 +187,7 @@ class _AgregarReservaScreenState extends State<AgregarReservaScreen>
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          'Agregar Reserva',
+          'Agregar Reserva${widget.horarios.length > 1 ? 's' : ''}',
           style: GoogleFonts.montserrat(
             fontWeight: FontWeight.w600,
           ),
@@ -359,7 +381,7 @@ class _AgregarReservaScreenState extends State<AgregarReservaScreen>
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Detalles de la Reserva',
+              'Detalles de la${widget.horarios.length > 1 ? 's' : ''} Reserva${widget.horarios.length > 1 ? 's' : ''}',
               style: GoogleFonts.montserrat(
                 fontSize: 18,
                 fontWeight: FontWeight.w600,
@@ -404,6 +426,7 @@ class _AgregarReservaScreenState extends State<AgregarReservaScreen>
             ),
             const SizedBox(height: 8),
             Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Icon(
                   Icons.access_time,
@@ -411,11 +434,41 @@ class _AgregarReservaScreenState extends State<AgregarReservaScreen>
                   size: 20,
                 ),
                 const SizedBox(width: 8),
-                Text(
-                  'Hora: ${widget.horario.horaFormateada}',
-                  style: GoogleFonts.montserrat(
-                    fontSize: 16,
-                    color: _primaryColor,
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Hora${widget.horarios.length > 1 ? 's' : ''}:',
+                        style: GoogleFonts.montserrat(
+                          fontSize: 16,
+                          color: _primaryColor,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 4,
+                        children: widget.horarios.map((horario) {
+                          return Chip(
+                            label: Text(
+                              horario.horaFormateada,
+                              style: GoogleFonts.montserrat(
+                                fontSize: 14,
+                                color: _primaryColor,
+                              ),
+                            ),
+                            backgroundColor: _secondaryColor.withOpacity(0.1),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                              side: BorderSide(
+                                color: _secondaryColor.withOpacity(0.3),
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ],
                   ),
                 ),
               ],
@@ -532,7 +585,7 @@ class _AgregarReservaScreenState extends State<AgregarReservaScreen>
                 keyboardType: TextInputType.emailAddress,
                 validator: (value) {
                   if (value == null || value.trim().isEmpty) {
-                    return null; // Correo es opcional
+                    return null;
                   }
                   if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$')
                       .hasMatch(value)) {
@@ -545,7 +598,7 @@ class _AgregarReservaScreenState extends State<AgregarReservaScreen>
               TextFormField(
                 controller: _valorController,
                 decoration: InputDecoration(
-                  labelText: 'Valor',
+                  labelText: 'Valor Total',
                   labelStyle: GoogleFonts.montserrat(
                     color: _primaryColor.withOpacity(0.6),
                   ),
@@ -633,7 +686,7 @@ class _AgregarReservaScreenState extends State<AgregarReservaScreen>
                   elevation: 0,
                 ),
                 child: Text(
-                  'Confirmar Reserva',
+                  'Confirmar Reserva${widget.horarios.length > 1 ? 's' : ''}',
                   style: GoogleFonts.montserrat(
                     fontSize: 16,
                     fontWeight: FontWeight.w600,

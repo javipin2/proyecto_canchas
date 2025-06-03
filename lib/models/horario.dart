@@ -1,4 +1,3 @@
-// lib/models/horario.dart (versión corregida)
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -25,43 +24,56 @@ class Horario {
     return horaStr.trim().toUpperCase();
   }
 
-  /// Registra un horario ocupado en Firestore.
-  /// Se almacena la fecha formateada con DateFormat() para consistencia.
-  static Future<void> marcarHorarioOcupado({
+  /// Registra un horario ocupado en Firestore con un ID determinista.
+  /// Verifica si la reserva ya existe para evitar duplicados.
+  static Future<bool> marcarHorarioOcupado({
     required DateTime fecha,
     required String canchaId,
     required String sede,
     required TimeOfDay hora,
   }) async {
     final String horaFormateada = Horario(hora: hora).horaFormateada;
-    // Usamos DateFormat para la fecha
     final String fechaStr = DateFormat('yyyy-MM-dd').format(fecha);
+    // Crear un ID determinista para la reserva
+    final String reservaId =
+        '${fechaStr}_${canchaId}_${horaFormateada}_${sede}';
 
     try {
-      await FirebaseFirestore.instance.collection('reservas').add({
+      final docRef =
+          FirebaseFirestore.instance.collection('reservas').doc(reservaId);
+
+      // Verificar si la reserva ya existe
+      final docSnapshot = await docRef.get();
+      if (docSnapshot.exists) {
+        print(
+            '⚠️ Reserva ya existe para $fechaStr a las $horaFormateada en $sede, cancha: $canchaId');
+        return false; // No crear duplicado
+      }
+
+      // Crear la reserva
+      await docRef.set({
         'fecha': fechaStr,
         'cancha_id': canchaId,
         'sede': sede,
-        'horario': horaFormateada, // Guardamos el formato original
+        'horario': horaFormateada,
         'estado': 'Pendiente',
         'created_at': Timestamp.now(),
       });
       print(
           '✅ Reserva guardada para $fechaStr a las $horaFormateada en $sede, cancha: $canchaId');
+      return true;
     } catch (e) {
       print('🔥 Error al marcar horario como ocupado: $e');
       throw Exception('🔥 Error al marcar horario como ocupado: $e');
     }
   }
 
-  /// Genera los horarios disponibles para una fecha, cancha y sede determinada,
-  /// considerando los horarios ocupados en Firestore.
+  /// Genera los horarios disponibles para una fecha, cancha y sede determinada.
   static Future<List<Horario>> generarHorarios({
     required DateTime fecha,
     required String canchaId,
     required String sede,
-    QuerySnapshot?
-        reservasSnapshot, // Permite pasar datos sin volver a consultar Firebase
+    QuerySnapshot? reservasSnapshot,
   }) async {
     final List<Horario> horarios = [];
     const List<int> horasDisponibles = [
@@ -85,13 +97,10 @@ class Horario {
       22,
       23
     ];
-
     final String fechaStr = DateFormat('yyyy-MM-dd').format(fecha);
-    print(
-        'Generando horarios para fecha: $fechaStr, cancha: $canchaId, sede: $sede');
 
     try {
-      // Usa los datos ya obtenidos si están disponibles
+      // Obtener reservas si no se proporcionó un snapshot
       reservasSnapshot ??= await FirebaseFirestore.instance
           .collection('reservas')
           .where('fecha', isEqualTo: fechaStr)
@@ -99,26 +108,25 @@ class Horario {
           .where('sede', isEqualTo: sede)
           .get();
 
-      print('📊 ${reservasSnapshot.docs.length} reservas para $fechaStr');
-
-      final List<String> horariosOcupados = reservasSnapshot.docs
-          .map((doc) => normalizarHora(
-              (doc.data() as Map<String, dynamic>)['horario'] ?? ''))
-          .toList();
+      // Usar un Set para comparaciones más rápidas
+      final horariosOcupados = <String>{
+        for (var doc in reservasSnapshot.docs)
+          normalizarHora((doc.data() as Map<String, dynamic>)['horario'] ?? '')
+      };
 
       final now = DateTime.now();
-      bool esHoy = fechaStr == DateFormat('yyyy-MM-dd').format(now);
+      final bool esHoy = fechaStr == DateFormat('yyyy-MM-dd').format(now);
 
       for (var h in horasDisponibles) {
         final timeOfDay = TimeOfDay(hour: h, minute: 0);
         final String horaFormateada = Horario(hora: timeOfDay).horaFormateada;
-        final bool ocupado =
-            horariosOcupados.contains(normalizarHora(horaFormateada)) ||
-                (esHoy && h <= now.hour);
+        final bool ocupado = horariosOcupados.contains(horaFormateada) ||
+            (esHoy && h <= now.hour);
 
         horarios.add(Horario(hora: timeOfDay, disponible: !ocupado));
       }
 
+      print('📊 ${horariosOcupados.length} horarios ocupados para $fechaStr');
       return horarios;
     } catch (e) {
       print('🔥 Error al obtener horarios ocupados: $e');

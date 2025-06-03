@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:reserva_canchas/models/cancha.dart';
 import 'editar_cancha_screen.dart';
 import 'registrar_cancha_screen.dart';
 import '../admin_dashboard_screen.dart';
@@ -606,7 +607,8 @@ class CanchasScreenState extends State<CanchasScreen> {
                                 MaterialPageRoute(
                                   builder: (context) => EditarCanchaScreen(
                                     canchaId: doc.id,
-                                    canchaData: data,
+                                    cancha: Cancha.fromFirestore(
+                                        doc), // Usar el modelo Cancha
                                   ),
                                 ),
                               );
@@ -708,7 +710,8 @@ class CanchasScreenState extends State<CanchasScreen> {
                       MaterialPageRoute(
                         builder: (context) => EditarCanchaScreen(
                           canchaId: doc.id,
-                          canchaData: data,
+                          cancha: Cancha.fromFirestore(
+                              doc), // Usar el modelo Cancha
                         ),
                       ),
                     );
