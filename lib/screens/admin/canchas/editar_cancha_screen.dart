@@ -329,33 +329,33 @@ class _EditarCanchaScreenState extends State<EditarCanchaScreen>
                   ),
                   child: _imagenSeleccionada != null
                       ? Stack(
-                          children: [
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(12),
-                              child: _buildImageWidget(),
-                            ),
-                            Positioned(
-                              top: 8,
-                              right: 8,
-                              child: Container(
-                                decoration: const BoxDecoration(
-                                  color: Colors.black54,
-                                  shape: BoxShape.circle,
-                                ),
-                                child: IconButton(
-                                  icon: const Icon(Icons.close,
-                                      color: Colors.white),
-                                  onPressed: () {
-                                    setState(() {
-                                      _imagenSeleccionada = null;
-                                      _imagenBytes = null;
-                                    });
-                                  },
-                                ),
-                              ),
-                            ),
-                          ],
-                        )
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: _buildImageWidget(),
+                      ),
+                      Positioned(
+                        top: 8,
+                        right: 8,
+                        child: Container(
+                          decoration: const BoxDecoration(
+                            color: Colors.black54,
+                            shape: BoxShape.circle,
+                          ),
+                          child: IconButton(
+                            icon: const Icon(Icons.close,
+                                color: Colors.white),
+                            onPressed: () {
+                              setState(() {
+                                _imagenSeleccionada = null;
+                                _imagenBytes = null;
+                              });
+                            },
+                          ),
+                        ),
+                      ),
+                    ],
+                  )
                       : _buildImagePlaceholder(),
                 ),
               ),
@@ -376,7 +376,7 @@ class _EditarCanchaScreenState extends State<EditarCanchaScreen>
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
                         valueColor:
-                            AlwaysStoppedAnimation<Color>(Color(0xFF4F46E5)),
+                        AlwaysStoppedAnimation<Color>(Color(0xFF4F46E5)),
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -434,10 +434,10 @@ class _EditarCanchaScreenState extends State<EditarCanchaScreen>
             child: CircularProgressIndicator(
               value: loadingProgress.expectedTotalBytes != null
                   ? loadingProgress.cumulativeBytesLoaded /
-                      loadingProgress.expectedTotalBytes!
+                  loadingProgress.expectedTotalBytes!
                   : null,
               valueColor:
-                  const AlwaysStoppedAnimation<Color>(Color(0xFF4F46E5)),
+              const AlwaysStoppedAnimation<Color>(Color(0xFF4F46E5)),
             ),
           );
         },
@@ -507,7 +507,7 @@ class _EditarCanchaScreenState extends State<EditarCanchaScreen>
         'preciosPorHorario': _preciosPorHorario,
         'disponible': _disponible,
         'motivoNoDisponible':
-            _disponible ? null : _motivoNoDisponibleController.text.trim(),
+        _disponible ? null : _motivoNoDisponibleController.text.trim(),
       });
 
       if (mounted) {
@@ -523,7 +523,7 @@ class _EditarCanchaScreenState extends State<EditarCanchaScreen>
             backgroundColor: Colors.green,
             behavior: SnackBarBehavior.floating,
             shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
           ),
         );
         Navigator.pop(context);
@@ -553,7 +553,7 @@ class _EditarCanchaScreenState extends State<EditarCanchaScreen>
           backgroundColor: Colors.red,
           behavior: SnackBarBehavior.floating,
           shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         ),
       );
     }
@@ -660,7 +660,7 @@ class _EditarCanchaScreenState extends State<EditarCanchaScreen>
               label: "Nombre de la Cancha",
               icon: Icons.sports_soccer,
               validator: (value) =>
-                  value == null || value.isEmpty ? "Ingrese el nombre" : null,
+              value == null || value.isEmpty ? "Ingrese el nombre" : null,
             ),
             const SizedBox(height: 16),
             _buildStyledTextField(
@@ -863,7 +863,7 @@ class _EditarCanchaScreenState extends State<EditarCanchaScreen>
         filled: true,
         fillColor: Colors.grey[50],
         contentPadding:
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       ),
     );
   }
@@ -888,7 +888,7 @@ class _EditarCanchaScreenState extends State<EditarCanchaScreen>
         filled: true,
         fillColor: Colors.grey[50],
         contentPadding:
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       ),
       value: _sede.isNotEmpty ? _sede : null,
       items: const [
@@ -896,9 +896,11 @@ class _EditarCanchaScreenState extends State<EditarCanchaScreen>
         DropdownMenuItem(value: "Sede 2", child: Text("Sede 2")),
       ],
       validator: (value) =>
-          value == null || value.isEmpty ? "Seleccione la sede" : null,
+      value == null || value.isEmpty ? "Seleccione la sede" : null,
       onChanged: (value) => setState(() => _sede = value ?? ""),
-      style: GoogleFonts.montserrat(),
+      style: GoogleFonts.montserrat(color: Colors.black87), // Forzado de color
+      dropdownColor: Colors.white, // Fondo claro para el menú
+      iconEnabledColor: const Color(0xFF4F46E5), // Ícono visible
     );
   }
 
@@ -934,7 +936,7 @@ class _EditarCanchaScreenState extends State<EditarCanchaScreen>
               decoration: InputDecoration(
                 labelText: "Día para editar precios",
                 prefixIcon:
-                    const Icon(Icons.calendar_today, color: Color(0xFF4F46E5)),
+                const Icon(Icons.calendar_today, color: Color(0xFF4F46E5)),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                   borderSide: BorderSide(color: Colors.grey[300]!),
@@ -946,12 +948,12 @@ class _EditarCanchaScreenState extends State<EditarCanchaScreen>
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                   borderSide:
-                      const BorderSide(color: Color(0xFF4F46E5), width: 2),
+                  const BorderSide(color: Color(0xFF4F46E5), width: 2),
                 ),
                 filled: true,
                 fillColor: Colors.grey[50],
                 contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
               ),
               value: _selectedDay,
               hint: const Text("Selecciona un día"),
@@ -962,7 +964,9 @@ class _EditarCanchaScreenState extends State<EditarCanchaScreen>
                 );
               }).toList(),
               onChanged: (value) => setState(() => _selectedDay = value),
-              style: GoogleFonts.montserrat(),
+              style: GoogleFonts.montserrat(color: Colors.black87), // Forzado de color
+              dropdownColor: Colors.white, // Fondo claro para el menú
+              iconEnabledColor: const Color(0xFF4F46E5), // Ícono visible
             ),
             if (_selectedDay != null) ...[
               const SizedBox(height: 20),
@@ -1038,7 +1042,7 @@ class _EditarCanchaScreenState extends State<EditarCanchaScreen>
           Expanded(
             child: TextFormField(
               initialValue:
-                  _preciosPorHorario[_selectedDay]![hora]?.toString() ?? "0",
+              _preciosPorHorario[_selectedDay]![hora]?.toString() ?? "0",
               decoration: InputDecoration(
                 prefixText: "\$ ",
                 border: OutlineInputBorder(
@@ -1052,12 +1056,12 @@ class _EditarCanchaScreenState extends State<EditarCanchaScreen>
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(8),
                   borderSide:
-                      const BorderSide(color: Color(0xFF4F46E5), width: 2),
+                  const BorderSide(color: Color(0xFF4F46E5), width: 2),
                 ),
                 filled: true,
                 fillColor: Colors.white,
                 contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                 isDense: true,
               ),
               keyboardType: TextInputType.number,
@@ -1098,35 +1102,35 @@ class _EditarCanchaScreenState extends State<EditarCanchaScreen>
             ),
             child: _isLoading
                 ? const Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          valueColor:
-                              AlwaysStoppedAnimation<Color>(Colors.white),
-                        ),
-                      ),
-                      SizedBox(width: 12),
-                      Text("Guardando..."),
-                    ],
-                  )
-                : Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.save),
-                      const SizedBox(width: 8),
-                      Text(
-                        "Guardar Cambios",
-                        style: GoogleFonts.montserrat(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 16,
-                        ),
-                      ),
-                    ],
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor:
+                    AlwaysStoppedAnimation<Color>(Colors.white),
                   ),
+                ),
+                SizedBox(width: 12),
+                Text("Guardando..."),
+              ],
+            )
+                : Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.save),
+                const SizedBox(width: 8),
+                Text(
+                  "Guardar Cambios",
+                  style: GoogleFonts.montserrat(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 16,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
         const SizedBox(height: 12),
