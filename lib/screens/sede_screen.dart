@@ -170,6 +170,8 @@ class _SedeScreenState extends State<SedeScreen>
         backgroundColor: Colors.transparent,
         elevation: 0,
         centerTitle: true,
+        // Eliminamos el botón de retroceso automático
+        automaticallyImplyLeading: false,
       ),
       body: Stack(
         children: [

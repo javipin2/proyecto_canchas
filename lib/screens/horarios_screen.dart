@@ -25,11 +25,9 @@ class _HorariosScreenState extends State<HorariosScreen>
   List<Horario> horarios = [];
   bool _isLoading = false;
   bool _calendarExpanded = false;
-  // Mapa para almacenar QuerySnapshots en memoria (no persistente)
   final Map<String, QuerySnapshot> _reservasSnapshots = {};
   Timer? _debounceTimer;
 
-  // Controladores para animaciones
   late AnimationController _fadeController;
   late Animation<double> _fadeAnimation;
   late AnimationController _slideController;
@@ -39,7 +37,6 @@ class _HorariosScreenState extends State<HorariosScreen>
   void initState() {
     super.initState();
 
-    // Configurar animaciones
     _fadeController = AnimationController(
       duration: const Duration(milliseconds: 300),
       vsync: this,
@@ -93,10 +90,8 @@ class _HorariosScreenState extends State<HorariosScreen>
       _isLoading = true;
     });
 
-    // Cancelar cualquier debounce pendiente
     _debounceTimer?.cancel();
 
-    // Crear una clave única para el QuerySnapshot
     final sedeProvider = Provider.of<SedeProvider>(context, listen: false);
     final sedeSeleccionada = sedeProvider.sede;
     final snapshotKey =
@@ -105,7 +100,6 @@ class _HorariosScreenState extends State<HorariosScreen>
     try {
       QuerySnapshot? reservasSnapshot = _reservasSnapshots[snapshotKey];
 
-      // Si no tenemos el snapshot, obtenerlo de Firestore
       if (reservasSnapshot == null) {
         reservasSnapshot = await FirebaseFirestore.instance
             .collection('reservas')
@@ -182,7 +176,6 @@ class _HorariosScreenState extends State<HorariosScreen>
         _calendarExpanded = false;
       });
 
-      // Implementar debouncing para retrasar la consulta
       _debounceTimer?.cancel();
       _debounceTimer = Timer(const Duration(milliseconds: 300), _loadHorarios);
     }
@@ -242,7 +235,7 @@ class _HorariosScreenState extends State<HorariosScreen>
               child: IconButton(
                 icon: const Icon(Icons.refresh, color: Color(0xFF424242)),
                 onPressed: () {
-                  _reservasSnapshots.clear(); // Forzar recarga
+                  _reservasSnapshots.clear();
                   _loadHorarios();
                 },
                 tooltip: 'Actualizar horarios',
@@ -302,7 +295,7 @@ class _HorariosScreenState extends State<HorariosScreen>
               width: 70,
               height: 70,
               fit: BoxFit.cover,
-              cacheWidth: 140, // Reducir tamaño en memoria
+              cacheWidth: 140,
               errorBuilder: (context, error, stackTrace) {
                 return Container(
                   width: 70,
@@ -354,6 +347,30 @@ class _HorariosScreenState extends State<HorariosScreen>
                     ),
                   ),
                 ),
+                if (!widget.cancha.disponible &&
+                    widget.cancha.motivoNoDisponible != null) ...[
+                  const SizedBox(height: 4),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.red.shade50,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: Colors.red.shade200,
+                        width: 1,
+                      ),
+                    ),
+                    child: Text(
+                      widget.cancha.motivoNoDisponible!,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.red.shade700,
+                      ),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -390,7 +407,9 @@ class _HorariosScreenState extends State<HorariosScreen>
 
   Widget _buildDateSelector() {
     return GestureDetector(
-      onTap: _toggleCalendar,
+      onTap: widget.cancha.disponible
+          ? _toggleCalendar
+          : null, // Deshabilitar si no está disponible
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         decoration: BoxDecoration(
@@ -541,6 +560,56 @@ class _HorariosScreenState extends State<HorariosScreen>
   }
 
   Widget _buildHorariosGrid() {
+    if (!widget.cancha.disponible) {
+      return Expanded(
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.warning_rounded, size: 70, color: Colors.red.shade300),
+              const SizedBox(height: 16),
+              Text(
+                'Cancha no disponible',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.grey.shade700,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                widget.cancha.motivoNoDisponible ?? 'No especificado',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey.shade600,
+                ),
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton.icon(
+                onPressed: () {
+                  _reservasSnapshots.clear();
+                  _loadHorarios();
+                },
+                icon: const Icon(Icons.refresh_outlined),
+                label: const Text('Actualizar'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.white,
+                  foregroundColor: Colors.grey.shade800,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    side: BorderSide(color: Colors.grey.shade300),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     if (_isLoading) {
       return Expanded(
         child: Center(
@@ -599,7 +668,7 @@ class _HorariosScreenState extends State<HorariosScreen>
               const SizedBox(height: 16),
               ElevatedButton.icon(
                 onPressed: () {
-                  _reservasSnapshots.clear(); // Forzar recarga
+                  _reservasSnapshots.clear();
                   _loadHorarios();
                 },
                 icon: const Icon(Icons.refresh_outlined),
@@ -642,7 +711,6 @@ class _HorariosScreenState extends State<HorariosScreen>
   }
 
   Widget _buildHorarioCard(Horario horario, String sede) {
-    // Calcular el precio dinámico para esta hora y día seleccionado
     final String day =
         DateFormat('EEEE', 'es').format(_selectedDate).toLowerCase();
     final String horaStr = '${horario.hora.hour}:00';
@@ -681,7 +749,7 @@ class _HorariosScreenState extends State<HorariosScreen>
                     ),
                   ).then((reservaRealizada) {
                     if (reservaRealizada == true) {
-                      _reservasSnapshots.clear(); // Forzar recarga tras reserva
+                      _reservasSnapshots.clear();
                       _loadHorarios();
                     }
                   });

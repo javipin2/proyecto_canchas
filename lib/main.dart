@@ -40,7 +40,7 @@ class MyApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       navigatorObservers: [routeObserver],
       theme: ThemeData(primaryColor: Colors.green),
-      home: const SplashScreen(), // 💡 Aquí cargamos el Splash primero
+      home: const SplashScreen(),
     );
   }
 }

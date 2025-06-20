@@ -90,7 +90,7 @@ class _ReservaScreenState extends State<ReservaScreen>
 
   // Función mejorada para verificar el pago con Wompi
   Future<Map<String, dynamic>> verificarPagoWompi(String referencia) async {
-    const String privateKey = 'prv_test_t3jvXlYXPYuX037eGKw5mnb8RgaF2pv6';
+    const String privateKey = 'prv_test_VAdwOa5pjSAspqzu3PvfjiPJZEuK1Nsi';
     final url = Uri.parse(
         'https://sandbox.wompi.co/v1/transactions?reference=$referencia');
 
@@ -138,9 +138,9 @@ class _ReservaScreenState extends State<ReservaScreen>
     required int valorEnPesos,
     required String referencia,
   }) async {
-    const String publicKey = 'pub_test_n70HxI2m02sZTLceWsSxORBaJlXp8yt3';
+    const String publicKey = 'pub_test_B3OQlsCmfebI3TnPfjcLdr994aC83tss';
     const String integrityKey =
-        'test_integrity_ZCHK5nvlL3ewTstrwRj7OVqdB4EgIUrn';
+        'test_integrity_emhhIGsqGPwxmauVNpLWZy6mOUSdCrJA';
     final int valorEnCentavos = valorEnPesos * 100;
     const String redirectUrl = 'https://proyecto-20bae.web.app/';
     const String currency = 'COP';

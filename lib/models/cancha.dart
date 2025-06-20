@@ -10,6 +10,8 @@ class Cancha {
   final double precio;
   final String sede;
   final Map<String, Map<String, double>> preciosPorHorario;
+  final bool disponible; // Nuevo campo para disponibilidad
+  final String? motivoNoDisponible; // Nuevo campo para motivo
 
   Cancha({
     required this.id,
@@ -21,6 +23,8 @@ class Cancha {
     required this.precio,
     required this.sede,
     this.preciosPorHorario = const {},
+    this.disponible = true, // Por defecto, la cancha está disponible
+    this.motivoNoDisponible, // Puede ser null si está disponible
   });
 
   // Crear Cancha desde un documento de Firestore
@@ -56,6 +60,8 @@ class Cancha {
           (data['precio'] is num) ? (data['precio'] as num).toDouble() : 0.0,
       sede: data['sede'] as String? ?? '',
       preciosPorHorario: preciosPorHorario,
+      disponible: data['disponible'] as bool? ?? true, // Nuevo campo
+      motivoNoDisponible: data['motivoNoDisponible'] as String?, // Nuevo campo
     );
   }
 
@@ -70,6 +76,8 @@ class Cancha {
       'precio': precio,
       'sede': sede,
       'preciosPorHorario': preciosPorHorario,
+      'disponible': disponible, // Nuevo campo
+      'motivoNoDisponible': motivoNoDisponible, // Nuevo campo
     };
   }
 
@@ -82,7 +90,10 @@ class Cancha {
         techada != other.techada ||
         ubicacion != other.ubicacion ||
         precio != other.precio ||
-        sede != other.sede) {
+        sede != other.sede ||
+        disponible != other.disponible || // Nuevo campo
+        motivoNoDisponible != other.motivoNoDisponible) {
+      // Nuevo campo
       return true;
     }
 

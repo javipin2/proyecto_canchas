@@ -21,15 +21,7 @@ class GraficasScreenState extends State<GraficasScreen> {
   List<Reserva> _reservas = [];
   List<Reserva> _filteredReservas = [];
   bool _isLoading = false;
-  String _filterType = 'Mes'; // Día, Semana, Mes
-
-  final Color _primaryColor = const Color(0xFF263238);
-  final Color _secondaryColor = const Color(0xFF0288D1);
-  final Color _backgroundColor = const Color(0xFFF5F7FA);
-  final Color _cardColor = Colors.white;
-  final Color _disabledColor = const Color(0xFFB0BEC5);
-  final Color _reservedColor = const Color(0xFF2ECC71);
-  final Color _accentColor = const Color(0xFFFFA726);
+  String _filterType = 'Mes';
 
   @override
   void initState() {
@@ -40,63 +32,31 @@ class GraficasScreenState extends State<GraficasScreen> {
   Future<void> _loadData() async {
     if (!mounted) return;
     setState(() => _isLoading = true);
+
     try {
       final canchaProvider =
           Provider.of<CanchaProvider>(context, listen: false);
       await canchaProvider.fetchAllCanchas();
       await canchaProvider.fetchHorasReservadas();
+
       final canchasMap = {
         for (var cancha in canchaProvider.canchas) cancha.id: cancha
       };
 
-      Query<Map<String, dynamic>> query =
-          FirebaseFirestore.instance.collection('reservas');
-
-      if (_selectedSede != null && _selectedSede!.isNotEmpty) {
-        query = query.where('sede', isEqualTo: _selectedSede);
-      }
-      if (_selectedCanchaId != null && _selectedCanchaId!.isNotEmpty) {
-        query = query.where('cancha_id', isEqualTo: _selectedCanchaId);
-      }
-      if (_selectedDate != null) {
-        if (_filterType == 'Día') {
-          final dateStr = DateFormat('yyyy-MM-dd').format(_selectedDate!);
-          query = query.where('fecha', isEqualTo: dateStr);
-        } else if (_filterType == 'Semana') {
-          final startOfWeek = _selectedDate!
-              .subtract(Duration(days: _selectedDate!.weekday - 1));
-          final endOfWeek = startOfWeek.add(const Duration(days: 6));
-          query = query
-              .where('fecha',
-                  isGreaterThanOrEqualTo:
-                      DateFormat('yyyy-MM-dd').format(startOfWeek))
-              .where('fecha',
-                  isLessThanOrEqualTo:
-                      DateFormat('yyyy-MM-dd').format(endOfWeek));
-        } else if (_filterType == 'Mes') {
-          final monthStr = DateFormat('yyyy-MM').format(_selectedDate!);
-          query = query
-              .where('fecha', isGreaterThanOrEqualTo: '$monthStr-01')
-              .where('fecha', isLessThanOrEqualTo: '$monthStr-31');
-        }
-      }
-
-      final querySnapshot =
-          await query.get().timeout(const Duration(seconds: 10));
+      final querySnapshot = await FirebaseFirestore.instance
+          .collection('reservas')
+          .get()
+          .timeout(const Duration(seconds: 10));
 
       _reservas = querySnapshot.docs
           .map((doc) => Reserva.fromFirestoreWithCanchas(doc, canchasMap))
           .toList();
-      _filteredReservas = _reservas;
+
       _applyFilters();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error al cargar datos: $e'),
-            backgroundColor: Colors.redAccent,
-            behavior: SnackBarBehavior.floating,
-          ),
+          SnackBar(content: Text('Error al cargar datos: $e')),
         );
       }
     } finally {
@@ -107,32 +67,51 @@ class GraficasScreenState extends State<GraficasScreen> {
   }
 
   void _applyFilters() {
-    List<Reserva> filtered = _reservas;
+    List<Reserva> filtered = List.from(_reservas);
+
+    if (_selectedSede?.isNotEmpty == true) {
+      filtered =
+          filtered.where((reserva) => reserva.sede == _selectedSede).toList();
+    }
+
+    if (_selectedCanchaId?.isNotEmpty == true) {
+      filtered = filtered
+          .where((reserva) => reserva.cancha.id == _selectedCanchaId)
+          .toList();
+    }
 
     if (_selectedDate != null) {
-      if (_filterType == 'Día') {
-        final dateStr = DateFormat('yyyy-MM-dd').format(_selectedDate!);
-        filtered = filtered.where((reserva) {
-          return DateFormat('yyyy-MM-dd').format(reserva.fecha) == dateStr;
-        }).toList();
-      } else if (_filterType == 'Semana') {
-        final startOfWeek =
-            _selectedDate!.subtract(Duration(days: _selectedDate!.weekday - 1));
-        final endOfWeek = startOfWeek.add(const Duration(days: 6));
-        filtered = filtered.where((reserva) {
-          return reserva.fecha
-                  .isAfter(startOfWeek.subtract(const Duration(days: 1))) &&
-              reserva.fecha.isBefore(endOfWeek.add(const Duration(days: 1)));
-        }).toList();
-      } else if (_filterType == 'Mes') {
-        final monthStr = DateFormat('yyyy-MM').format(_selectedDate!);
-        filtered = filtered.where((reserva) {
-          return DateFormat('yyyy-MM').format(reserva.fecha) == monthStr;
-        }).toList();
-      }
+      filtered = filtered.where((reserva) {
+        switch (_filterType) {
+          case 'Día':
+            return _isSameDay(reserva.fecha, _selectedDate!);
+          case 'Semana':
+            return _isInSameWeek(reserva.fecha, _selectedDate!);
+          case 'Mes':
+            return _isSameMonth(reserva.fecha, _selectedDate!);
+          default:
+            return true;
+        }
+      }).toList();
     }
 
     setState(() => _filteredReservas = filtered);
+  }
+
+  bool _isSameDay(DateTime date1, DateTime date2) {
+    return date1.year == date2.year &&
+        date1.month == date2.month &&
+        date1.day == date2.day;
+  }
+
+  bool _isSameMonth(DateTime date1, DateTime date2) {
+    return date1.year == date2.year && date1.month == date2.month;
+  }
+
+  bool _isInSameWeek(DateTime date1, DateTime date2) {
+    final startOfWeek1 = date1.subtract(Duration(days: date1.weekday - 1));
+    final startOfWeek2 = date2.subtract(Duration(days: date2.weekday - 1));
+    return _isSameDay(startOfWeek1, startOfWeek2);
   }
 
   void _clearFilters() {
@@ -141,9 +120,8 @@ class GraficasScreenState extends State<GraficasScreen> {
       _selectedSede = null;
       _selectedCanchaId = null;
       _filterType = 'Mes';
-      _filteredReservas = _reservas;
     });
-    _loadData();
+    _applyFilters();
   }
 
   Future<void> _selectDate(BuildContext context) async {
@@ -152,178 +130,177 @@ class GraficasScreenState extends State<GraficasScreen> {
       initialDate: _selectedDate ?? DateTime.now(),
       firstDate: DateTime(2020),
       lastDate: DateTime.now(),
-      builder: (context, child) {
-        return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: ColorScheme.light(
-              primary: _secondaryColor,
-              onPrimary: Colors.white,
-              onSurface: _primaryColor,
-            ),
-            textButtonTheme: TextButtonThemeData(
-              style: TextButton.styleFrom(foregroundColor: _secondaryColor),
-            ),
-          ),
-          child: child!,
-        );
-      },
     );
+
     if (picked != null && mounted) {
-      setState(() {
-        _selectedDate = picked;
-        _applyFilters();
-      });
-      _loadData();
+      setState(() => _selectedDate = picked);
+      _applyFilters();
     }
   }
 
-  void _selectSede(String? sede) {
-    setState(() {
-      _selectedSede = sede;
-      _selectedCanchaId = null;
-      _applyFilters();
-    });
-    _loadData();
-  }
+  Map<String, dynamic> _getStats() {
+    final totalReservas = _filteredReservas.length;
+    final totalCanchas =
+        Provider.of<CanchaProvider>(context, listen: false).canchas.length;
+    final totalSedes = Provider.of<CanchaProvider>(context, listen: false)
+        .canchas
+        .map((c) => c.sede)
+        .toSet()
+        .length;
 
-  void _selectCancha(String? canchaId) {
-    setState(() {
-      _selectedCanchaId = canchaId;
-      _applyFilters();
-    });
-    _loadData();
-  }
+    String canchaMasPedida = 'Sin datos';
+    String sedeMasPedida = 'Sin datos';
+    String horaMasPedida = 'Sin datos';
 
-  List<PieChartSectionData> _getConfirmationData() {
-    if (_filteredReservas.isEmpty) {
-      return [
-        PieChartSectionData(
-          value: 1,
-          color: _disabledColor,
-          title: 'Sin datos',
-          radius: 100,
-          titleStyle: const TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
-            color: Colors.white,
-            shadows: [Shadow(color: Colors.black45, blurRadius: 2)],
-          ),
-        ),
-      ];
-    }
-    final confirmadas =
-        _filteredReservas.where((r) => r.confirmada).length.toDouble();
-    final noConfirmadas = (_filteredReservas.length - confirmadas).toDouble();
-    return [
-      PieChartSectionData(
-        value: confirmadas,
-        color: _reservedColor,
-        title: confirmadas == 0 ? '' : confirmadas.toInt().toString(),
-        radius: 100,
-        titleStyle: const TextStyle(
-          fontSize: 16,
-          fontWeight: FontWeight.bold,
-          color: Colors.white,
-          shadows: [Shadow(color: Colors.black45, blurRadius: 2)],
-        ),
-      ),
-      PieChartSectionData(
-        value: noConfirmadas,
-        color: Colors.redAccent,
-        title: noConfirmadas == 0 ? '' : noConfirmadas.toInt().toString(),
-        radius: 100,
-        titleStyle: const TextStyle(
-          fontSize: 16,
-          fontWeight: FontWeight.bold,
-          color: Colors.white,
-          shadows: [Shadow(color: Colors.black45, blurRadius: 2)],
-        ),
-      ),
-    ];
-  }
+    if (_filteredReservas.isNotEmpty) {
+      final canchaCount = <String, int>{};
+      final sedeCount = <String, int>{};
+      final horaCount = <String, int>{};
 
-  List<BarChartGroupData> _getSedeSalesData() {
-    if (_filteredReservas.isEmpty) return [];
-    final sedes = _filteredReservas.map((r) => r.sede).toSet().toList();
-    return List.generate(sedes.length, (index) {
-      final sede = sedes[index];
-      final total = _filteredReservas
-          .where((r) => r.sede == sede)
-          .fold(0.0, (total, r) => total + r.montoPagado);
-      return BarChartGroupData(
-        x: index,
-        barRods: [
-          BarChartRodData(
-            toY: total,
-            color: _secondaryColor,
-            width: 20,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
-          ),
-        ],
-        showingTooltipIndicators: [0],
-      );
-    });
-  }
-
-  List<BarChartGroupData> _getCanchaData() {
-    if (_filteredReservas.isEmpty) return [];
-    final canchas =
-        _filteredReservas.map((r) => r.cancha.nombre).toSet().toList();
-    return List.generate(canchas.length, (index) {
-      final cancha = canchas[index];
-      final count = _filteredReservas
-          .where((r) => r.cancha.nombre == cancha)
-          .length
-          .toDouble();
-      return BarChartGroupData(
-        x: index,
-        barRods: [
-          BarChartRodData(
-            toY: count,
-            color: _accentColor,
-            width: 20,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
-          ),
-        ],
-        showingTooltipIndicators: [0],
-      );
-    });
-  }
-
-  List<LineChartBarData> _getSalesData() {
-    if (_filteredReservas.isEmpty) return [];
-    final salesData = <DateTime, double>{};
-    for (var reserva in _filteredReservas) {
-      DateTime key;
-      if (_filterType == 'Día') {
-        key = DateTime(
-            reserva.fecha.year, reserva.fecha.month, reserva.fecha.day);
-      } else if (_filterType == 'Semana') {
-        final startOfWeek =
-            reserva.fecha.subtract(Duration(days: reserva.fecha.weekday - 1));
-        key = DateTime(startOfWeek.year, startOfWeek.month, startOfWeek.day);
-      } else {
-        key = DateTime(reserva.fecha.year, reserva.fecha.month);
+      for (var reserva in _filteredReservas) {
+        canchaCount[reserva.cancha.nombre] =
+            (canchaCount[reserva.cancha.nombre] ?? 0) + 1;
+        sedeCount[reserva.sede] = (sedeCount[reserva.sede] ?? 0) + 1;
+        horaCount[reserva.horario.horaFormateada] =
+            (horaCount[reserva.horario.horaFormateada] ?? 0) + 1;
       }
-      salesData[key] = (salesData[key] ?? 0) + reserva.montoPagado;
+
+      if (canchaCount.isNotEmpty) {
+        canchaMasPedida =
+            canchaCount.entries.reduce((a, b) => a.value > b.value ? a : b).key;
+      }
+      if (sedeCount.isNotEmpty) {
+        sedeMasPedida =
+            sedeCount.entries.reduce((a, b) => a.value > b.value ? a : b).key;
+      }
+      if (horaCount.isNotEmpty) {
+        horaMasPedida =
+            horaCount.entries.reduce((a, b) => a.value > b.value ? a : b).key;
+      }
     }
-    final sortedKeys = salesData.keys.toList()..sort();
-    return [
-      LineChartBarData(
-        spots: sortedKeys
-            .map((date) => FlSpot(
-                date.millisecondsSinceEpoch.toDouble(), salesData[date]!))
-            .toList(),
-        isCurved: true,
-        color: _secondaryColor,
-        barWidth: 3,
-        dotData: const FlDotData(show: true),
-        belowBarData: BarAreaData(
-          show: true,
-          color: Color.fromRGBO(2, 136, 209, 0.2),
-        ),
-      ),
-    ];
+
+    return {
+      'totalReservas': totalReservas,
+      'totalCanchas': totalCanchas,
+      'totalSedes': totalSedes,
+      'canchaMasPedida': canchaMasPedida,
+      'sedeMasPedida': sedeMasPedida,
+      'horaMasPedida': horaMasPedida,
+    };
+  }
+
+  List<BarChartGroupData> _getSedeReservasData() {
+    if (_filteredReservas.isEmpty) return [];
+
+    final sedeCount = <String, int>{};
+    for (var reserva in _filteredReservas) {
+      sedeCount[reserva.sede] = (sedeCount[reserva.sede] ?? 0) + 1;
+    }
+
+    final sedes = sedeCount.keys.toList();
+    return List.generate(sedes.length, (index) {
+      return BarChartGroupData(
+        x: index,
+        barRods: [
+          BarChartRodData(
+            toY: sedeCount[sedes[index]]!.toDouble(),
+            color: Colors.blue,
+            width: 20,
+          ),
+        ],
+      );
+    });
+  }
+
+  List<BarChartGroupData> _getCanchaReservasData() {
+    if (_filteredReservas.isEmpty) return [];
+
+    final canchaCount = <String, int>{};
+    for (var reserva in _filteredReservas) {
+      canchaCount[reserva.cancha.nombre] =
+          (canchaCount[reserva.cancha.nombre] ?? 0) + 1;
+    }
+
+    final canchas = canchaCount.keys.toList();
+    return List.generate(canchas.length, (index) {
+      return BarChartGroupData(
+        x: index,
+        barRods: [
+          BarChartRodData(
+            toY: canchaCount[canchas[index]]!.toDouble(),
+            color: Colors.orange,
+            width: 20,
+          ),
+        ],
+      );
+    });
+  }
+
+  List<BarChartGroupData> _getHorarioReservasData() {
+    if (_filteredReservas.isEmpty) return [];
+
+    final horaCount = <String, int>{};
+    for (var reserva in _filteredReservas) {
+      horaCount[reserva.horario.horaFormateada] =
+          (horaCount[reserva.horario.horaFormateada] ?? 0) + 1;
+    }
+
+    final horas = horaCount.keys.toList();
+    return List.generate(horas.length, (index) {
+      return BarChartGroupData(
+        x: index,
+        barRods: [
+          BarChartRodData(
+            toY: horaCount[horas[index]]!.toDouble(),
+            color: Colors.green,
+            width: 20,
+          ),
+        ],
+      );
+    });
+  }
+
+  Map<String, dynamic> _getReservasTemporalesData() {
+    if (_filteredReservas.isEmpty)
+      return {'spots': <FlSpot>[], 'labels': <String>[]};
+
+    final reservasData = <String, int>{};
+
+    // Agrupar las reservas según el tipo de filtro
+    for (var reserva in _filteredReservas) {
+      String key;
+      switch (_filterType) {
+        case 'Día':
+          key = DateFormat('dd/MM/yyyy').format(reserva.fecha);
+          break;
+        case 'Semana':
+          final startOfWeek =
+              reserva.fecha.subtract(Duration(days: reserva.fecha.weekday - 1));
+          final endOfWeek = startOfWeek.add(const Duration(days: 6));
+          key =
+              '${DateFormat('dd/MM').format(startOfWeek)}-${DateFormat('dd/MM').format(endOfWeek)}';
+          break;
+        case 'Mes':
+        default:
+          key = DateFormat('MMM yyyy', 'es').format(reserva.fecha);
+          break;
+      }
+      reservasData[key] = (reservasData[key] ?? 0) + 1;
+    }
+
+    final sortedEntries = reservasData.entries.toList()
+      ..sort((a, b) => a.key.compareTo(b.key));
+
+    final spots = sortedEntries.asMap().entries.map((entry) {
+      return FlSpot(entry.key.toDouble(), entry.value.value.toDouble());
+    }).toList();
+
+    final labels = sortedEntries.map((entry) => entry.key).toList();
+
+    return {
+      'spots': spots,
+      'labels': labels,
+    };
   }
 
   @override
@@ -333,650 +310,487 @@ class GraficasScreenState extends State<GraficasScreen> {
         .where(
             (cancha) => _selectedSede == null || cancha.sede == _selectedSede)
         .toList();
+    final stats = _getStats();
+    final isWide = MediaQuery.of(context).size.width > 800;
 
     return Scaffold(
-      backgroundColor: _backgroundColor,
       appBar: AppBar(
         title: const Text("Análisis de Reservas"),
-        backgroundColor: _cardColor,
-        elevation: 2,
-        foregroundColor: _primaryColor,
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _loadData,
-            tooltip: 'Recargar datos',
           ),
         ],
       ),
       body: _isLoading
-          ? Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  CircularProgressIndicator(
-                      strokeWidth: 3,
-                      valueColor:
-                          AlwaysStoppedAnimation<Color>(_secondaryColor)),
-                  const SizedBox(height: 16),
-                  Text('Cargando datos...',
-                      style: TextStyle(color: _primaryColor)),
-                ],
-              ),
-            )
-          : Padding(
+          ? const Center(child: CircularProgressIndicator())
+          : SingleChildScrollView(
               padding: const EdgeInsets.all(16.0),
-              child: MediaQuery.of(context).size.width > 600
-                  ? Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _buildLeftColumn(canchaProvider, canchas),
-                        const SizedBox(width: 16),
-                        _filteredReservas.isEmpty
-                            ? _buildEmptyState()
-                            : _buildRightColumn(),
-                      ],
-                    )
-                  : SingleChildScrollView(
+              child: Column(
+                children: [
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16.0),
                       child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _buildLeftColumn(canchaProvider, canchas),
+                          const Text('Filtros',
+                              style: TextStyle(
+                                  fontSize: 18, fontWeight: FontWeight.bold)),
                           const SizedBox(height: 16),
-                          _filteredReservas.isEmpty
-                              ? _buildEmptyState()
-                              : _buildRightColumn(),
+                          isWide
+                              ? Row(
+                                  children: [
+                                    Expanded(child: _buildFilterDropdown()),
+                                    const SizedBox(width: 16),
+                                    Expanded(child: _buildDateSelector()),
+                                    const SizedBox(width: 16),
+                                    Expanded(
+                                        child:
+                                            _buildSedeDropdown(canchaProvider)),
+                                    const SizedBox(width: 16),
+                                    Expanded(
+                                        child: _buildCanchaDropdown(canchas)),
+                                  ],
+                                )
+                              : Column(
+                                  children: [
+                                    _buildFilterDropdown(),
+                                    const SizedBox(height: 12),
+                                    _buildDateSelector(),
+                                    const SizedBox(height: 12),
+                                    _buildSedeDropdown(canchaProvider),
+                                    const SizedBox(height: 12),
+                                    _buildCanchaDropdown(canchas),
+                                  ],
+                                ),
+                          const SizedBox(height: 16),
+                          ElevatedButton(
+                            onPressed: _clearFilters,
+                            child: const Text('Limpiar Filtros'),
+                          ),
                         ],
                       ),
                     ),
+                  ),
+                  const SizedBox(height: 16),
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Estadísticas - Período: $_filterType',
+                              style: const TextStyle(
+                                  fontSize: 18, fontWeight: FontWeight.bold)),
+                          const SizedBox(height: 16),
+                          isWide
+                              ? Row(
+                                  children: [
+                                    Expanded(
+                                        child: _buildStatsColumn(stats, 0)),
+                                    Expanded(
+                                        child: _buildStatsColumn(stats, 1)),
+                                  ],
+                                )
+                              : _buildStatsColumn(stats, -1),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  if (_filteredReservas.isNotEmpty) ...[
+                    isWide
+                        ? Row(
+                            children: [
+                              Expanded(
+                                  child: _buildChart(
+                                      'Reservas por Sede', _buildSedeChart())),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                  child: _buildChart('Reservas por Cancha',
+                                      _buildCanchaChart())),
+                            ],
+                          )
+                        : Column(
+                            children: [
+                              _buildChart(
+                                  'Reservas por Sede', _buildSedeChart()),
+                              const SizedBox(height: 16),
+                              _buildChart(
+                                  'Reservas por Cancha', _buildCanchaChart()),
+                            ],
+                          ),
+                    const SizedBox(height: 16),
+                    _buildChart('Horarios Más Pedidos', _buildHorarioChart()),
+                    const SizedBox(height: 16),
+                    _buildChart('Reservas en el Tiempo ($_filterType)',
+                        _buildTemporalChart()),
+                  ] else
+                    const Center(
+                      child: Column(
+                        children: [
+                          Icon(Icons.info_outline,
+                              size: 64, color: Colors.grey),
+                          SizedBox(height: 16),
+                          Text('No hay datos para mostrar',
+                              style:
+                                  TextStyle(fontSize: 18, color: Colors.grey)),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
             ),
     );
   }
 
-  Widget _buildLeftColumn(CanchaProvider canchaProvider, List<Cancha> canchas) {
-    final totalVentas =
-        _filteredReservas.fold(0.0, (total, r) => total + r.montoPagado);
-    final reservasConfirmadas =
-        _filteredReservas.where((r) => r.confirmada).length;
-    final reservasTotales = _filteredReservas.length;
-    final totalCanchas = canchaProvider.canchas.length;
-    final totalSedes = canchaProvider.canchas.map((c) => c.sede).toSet().length;
-    final canchaMasPedida = _filteredReservas.isEmpty
-        ? 'Sin datos'
-        : _filteredReservas
-                .map((r) => r.cancha.nombre)
-                .toList()
-                .fold<Map<String, int>>({}, (map, cancha) {
-                  map[cancha] = (map[cancha] ?? 0) + 1;
-                  return map;
-                })
-                .entries
-                .toList()
-                .isEmpty
-            ? 'Sin datos'
-            : _filteredReservas
-                .map((r) => r.cancha.nombre)
-                .toList()
-                .fold<Map<String, int>>({}, (map, cancha) {
-                  map[cancha] = (map[cancha] ?? 0) + 1;
-                  return map;
-                })
-                .entries
-                .reduce((a, b) => a.value > b.value ? a : b)
-                .key;
-    final sedeMasPedida = _filteredReservas.isEmpty
-        ? 'Sin datos'
-        : _filteredReservas
-                .map((r) => r.sede)
-                .toList()
-                .fold<Map<String, int>>({}, (map, sede) {
-                  map[sede] = (map[sede] ?? 0) + 1;
-                  return map;
-                })
-                .entries
-                .toList()
-                .isEmpty
-            ? 'Sin datos'
-            : _filteredReservas
-                .map((r) => r.sede)
-                .toList()
-                .fold<Map<String, int>>({}, (map, sede) {
-                  map[sede] = (map[sede] ?? 0) + 1;
-                  return map;
-                })
-                .entries
-                .reduce((a, b) => a.value > b.value ? a : b)
-                .key;
-
-    return Expanded(
-      flex: 1,
-      child: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Card(
-              elevation: 2,
-              color: _cardColor,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12)),
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Filtros',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: _primaryColor,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    _buildDropdown(
-                      value: _filterType,
-                      hint: 'Seleccionar tipo de filtro',
-                      items: const ['Día', 'Semana', 'Mes'],
-                      onChanged: (value) {
-                        setState(() {
-                          _filterType = value!;
-                          _applyFilters();
-                        });
-                        _loadData();
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    _buildDatePicker(),
-                    const SizedBox(height: 12),
-                    _buildDropdown(
-                      value: _selectedSede,
-                      hint: 'Todas las sedes',
-                      items: [
-                        null,
-                        ...canchaProvider.canchas.map((c) => c.sede).toSet()
-                      ],
-                      onChanged: _selectSede,
-                    ),
-                    const SizedBox(height: 12),
-                    _buildDropdown(
-                      value: _selectedCanchaId,
-                      hint: 'Todas las canchas',
-                      items: [null, ...canchas.map((cancha) => cancha.id)],
-                      itemBuilder: (value) => value == null
-                          ? const Text('Todas las canchas')
-                          : Text(canchas
-                              .firstWhere((c) => c.id == value,
-                                  orElse: () => Cancha(
-                                      id: '',
-                                      nombre: 'Desconocida',
-                                      descripcion: '',
-                                      imagen: '',
-                                      techada: false,
-                                      ubicacion: '',
-                                      precio: 0.0,
-                                      sede: ''))
-                              .nombre),
-                      onChanged: _selectCancha,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            _buildMetricCard(
-                'Total Ingresos',
-                '\$${totalVentas.toStringAsFixed(2)}',
-                Icons.attach_money,
-                _secondaryColor),
-            _buildMetricCard(
-                'Reservas Confirmadas',
-                '$reservasConfirmadas/$reservasTotales',
-                Icons.check_circle,
-                _reservedColor),
-            _buildMetricCard('Total Canchas', '$totalCanchas',
-                Icons.sports_soccer, _accentColor),
-            _buildMetricCard(
-                'Total Sedes', '$totalSedes', Icons.store, Colors.purpleAccent),
-            _buildMetricCard(
-                'Cancha Más Pedida', canchaMasPedida, Icons.star, _accentColor),
-            _buildMetricCard('Sede Más Pedida', sedeMasPedida,
-                Icons.location_on, Colors.purpleAccent),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildRightColumn() {
-    return Expanded(
-      flex: 2,
-      child: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _buildChartSection(
-              title: 'Ingresos por Sede',
-              chart: _getSedeSalesData().isEmpty
-                  ? const Center(child: Text('No hay datos para mostrar'))
-                  : BarChart(
-                      BarChartData(
-                        barGroups: _getSedeSalesData(),
-                        titlesData: FlTitlesData(
-                          bottomTitles: AxisTitles(
-                            sideTitles: SideTitles(
-                              showTitles: true,
-                              reservedSize: 40,
-                              getTitlesWidget: (value, meta) {
-                                final sedes = _filteredReservas
-                                    .map((r) => r.sede)
-                                    .toSet()
-                                    .toList();
-                                if (value.toInt() >= sedes.length) {
-                                  return const SizedBox.shrink();
-                                }
-                                return SideTitleWidget(
-                                  axisSide: meta.axisSide,
-                                  angle: 45 * 3.1415927 / 180,
-                                  child: Text(
-                                    sedes[value.toInt()],
-                                    style: const TextStyle(
-                                        color: Colors.black, fontSize: 12),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                );
-                              },
-                            ),
-                          ),
-                          leftTitles: AxisTitles(
-                            sideTitles: SideTitles(
-                              showTitles: true,
-                              reservedSize: 40,
-                              getTitlesWidget: (value, meta) => Text(
-                                '\$${value.toInt()}',
-                                style: const TextStyle(
-                                    color: Colors.black, fontSize: 12),
-                              ),
-                            ),
-                          ),
-                          topTitles: const AxisTitles(
-                              sideTitles: SideTitles(showTitles: false)),
-                          rightTitles: const AxisTitles(
-                              sideTitles: SideTitles(showTitles: false)),
-                        ),
-                        borderData: FlBorderData(
-                            show: true,
-                            border: Border.all(color: _disabledColor)),
-                        gridData: FlGridData(
-                          show: true,
-                          drawVerticalLine: false,
-                          horizontalInterval: _filteredReservas.fold(0.0,
-                                          (total, r) => total + r.montoPagado) /
-                                      5 >
-                                  0
-                              ? _filteredReservas.fold(0.0,
-                                      (total, r) => total + r.montoPagado) /
-                                  5
-                              : 1.0,
-                        ),
-                        barTouchData: BarTouchData(
-                          enabled: true,
-                          touchTooltipData: BarTouchTooltipData(
-                            getTooltipItem:
-                                (group, groupIndex, rod, rodIndex) =>
-                                    BarTooltipItem(
-                              '\$${rod.toY.toStringAsFixed(2)}',
-                              const TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-            ),
-            _buildChartSection(
-              title: 'Reservas por Estado',
-              chart: PieChart(
-                PieChartData(
-                  sections: _getConfirmationData(),
-                  centerSpaceRadius: 50,
-                  sectionsSpace: 2,
-                  startDegreeOffset: 270,
-                ),
-              ),
-            ),
-            _buildChartSection(
-              title: 'Canchas Más Reservadas',
-              chart: _getCanchaData().isEmpty
-                  ? const Center(child: Text('No hay datos para mostrar'))
-                  : BarChart(
-                      BarChartData(
-                        barGroups: _getCanchaData(),
-                        titlesData: FlTitlesData(
-                          bottomTitles: AxisTitles(
-                            sideTitles: SideTitles(
-                              showTitles: true,
-                              reservedSize: 40,
-                              getTitlesWidget: (value, meta) {
-                                final canchas = _filteredReservas
-                                    .map((r) => r.cancha.nombre)
-                                    .toSet()
-                                    .toList();
-                                if (value.toInt() >= canchas.length) {
-                                  return const SizedBox.shrink();
-                                }
-                                return SideTitleWidget(
-                                  axisSide: meta.axisSide,
-                                  angle: 45 * 3.1415927 / 180,
-                                  child: Text(
-                                    canchas[value.toInt()],
-                                    style: const TextStyle(
-                                        color: Colors.black, fontSize: 12),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                );
-                              },
-                            ),
-                          ),
-                          leftTitles: AxisTitles(
-                            sideTitles: SideTitles(
-                              showTitles: true,
-                              reservedSize: 40,
-                              getTitlesWidget: (value, meta) => Text(
-                                '${value.toInt()}',
-                                style: const TextStyle(
-                                    color: Colors.black, fontSize: 12),
-                              ),
-                            ),
-                          ),
-                          topTitles: const AxisTitles(
-                              sideTitles: SideTitles(showTitles: false)),
-                          rightTitles: const AxisTitles(
-                              sideTitles: SideTitles(showTitles: false)),
-                        ),
-                        borderData: FlBorderData(
-                            show: true,
-                            border: Border.all(color: _disabledColor)),
-                        gridData: FlGridData(
-                          show: true,
-                          drawVerticalLine: false,
-                          horizontalInterval:
-                              _filteredReservas.length.toDouble() / 5 > 0
-                                  ? _filteredReservas.length.toDouble() / 5
-                                  : 1.0,
-                        ),
-                        barTouchData: BarTouchData(
-                          enabled: true,
-                          touchTooltipData: BarTouchTooltipData(
-                            getTooltipItem:
-                                (group, groupIndex, rod, rodIndex) =>
-                                    BarTooltipItem(
-                              '${rod.toY.toInt()}',
-                              const TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-            ),
-            _buildChartSection(
-              title: 'Ingresos ($_filterType)',
-              chart: _getSalesData().isEmpty
-                  ? const Center(child: Text('No hay datos para mostrar'))
-                  : LineChart(
-                      LineChartData(
-                        lineBarsData: _getSalesData(),
-                        titlesData: FlTitlesData(
-                          bottomTitles: AxisTitles(
-                            sideTitles: SideTitles(
-                              showTitles: true,
-                              reservedSize: 30,
-                              getTitlesWidget: (value, meta) {
-                                final date =
-                                    DateTime.fromMillisecondsSinceEpoch(
-                                        value.toInt());
-                                return SideTitleWidget(
-                                  axisSide: meta.axisSide,
-                                  child: Text(
-                                    _filterType == 'Día'
-                                        ? DateFormat('dd MMM').format(date)
-                                        : _filterType == 'Semana'
-                                            ? DateFormat('dd MMM').format(date)
-                                            : DateFormat('MMM yy').format(date),
-                                    style: const TextStyle(
-                                        color: Colors.black, fontSize: 10),
-                                  ),
-                                );
-                              },
-                            ),
-                          ),
-                          leftTitles: AxisTitles(
-                            sideTitles: SideTitles(
-                              showTitles: true,
-                              reservedSize: 40,
-                              getTitlesWidget: (value, meta) => Text(
-                                '\$${value.toInt()}',
-                                style: const TextStyle(
-                                    color: Colors.black, fontSize: 12),
-                              ),
-                            ),
-                          ),
-                          topTitles: const AxisTitles(
-                              sideTitles: SideTitles(showTitles: false)),
-                          rightTitles: const AxisTitles(
-                              sideTitles: SideTitles(showTitles: false)),
-                        ),
-                        borderData: FlBorderData(
-                            show: true,
-                            border: Border.all(color: _disabledColor)),
-                        gridData: FlGridData(
-                          show: true,
-                          drawVerticalLine: false,
-                          horizontalInterval: _filteredReservas.fold(0.0,
-                                          (total, r) => total + r.montoPagado) /
-                                      5 >
-                                  0
-                              ? _filteredReservas.fold(0.0,
-                                      (total, r) => total + r.montoPagado) /
-                                  5
-                              : 1.0,
-                        ),
-                        lineTouchData: LineTouchData(
-                          enabled: true,
-                          touchTooltipData: LineTouchTooltipData(
-                            getTooltipItems: (spots) {
-                              return spots.map((spot) {
-                                return LineTooltipItem(
-                                  '\$${spot.y.toStringAsFixed(2)}',
-                                  const TextStyle(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.bold),
-                                );
-                              }).toList();
-                            },
-                          ),
-                        ),
-                      ),
-                    ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildEmptyState() {
-    return Expanded(
-      flex: 2,
-      child: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.info_outline, size: 64, color: _disabledColor),
-            const SizedBox(height: 16),
-            Text(
-              'No hay reservas para los filtros seleccionados',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w500,
-                color: _primaryColor,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Prueba ajustar los filtros o recargar los datos',
-              style: TextStyle(
-                fontSize: 14,
-                color: _disabledColor,
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDropdown({
-    String? value,
-    required String hint,
-    required List<String?> items,
-    Widget Function(String?)? itemBuilder,
-    required void Function(String?) onChanged,
-  }) {
+  Widget _buildFilterDropdown() {
     return DropdownButtonFormField<String>(
-      value: value,
-      decoration: InputDecoration(
-        hintText: hint,
-        hintStyle: TextStyle(color: _disabledColor),
-        filled: true,
-        fillColor: _cardColor,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: _disabledColor),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: _disabledColor),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: _secondaryColor, width: 2),
-        ),
+      value: _filterType,
+      decoration: const InputDecoration(
+        labelText: 'Período',
+        border: OutlineInputBorder(),
       ),
-      items: items.map((item) {
-        return DropdownMenuItem<String>(
-          value: item,
-          child: itemBuilder != null ? itemBuilder(item) : Text(item ?? hint),
-        );
-      }).toList(),
-      onChanged: onChanged,
-      style: TextStyle(color: _primaryColor),
-      icon: Icon(Icons.keyboard_arrow_down, color: _secondaryColor),
-      isExpanded: true,
+      items: ['Día', 'Semana', 'Mes']
+          .map((type) => DropdownMenuItem(value: type, child: Text(type)))
+          .toList(),
+      onChanged: (value) {
+        if (value != null && value != _filterType) {
+          setState(() => _filterType = value);
+          _applyFilters();
+        }
+      },
     );
   }
 
-  Widget _buildDatePicker() {
+  Widget _buildDateSelector() {
     return InkWell(
       onTap: () => _selectDate(context),
-      child: Container(
-        decoration: BoxDecoration(
-          color: _cardColor,
-          border: Border.all(color: _disabledColor),
-          borderRadius: BorderRadius.circular(12),
+      child: InputDecorator(
+        decoration: const InputDecoration(
+          labelText: 'Fecha',
+          border: OutlineInputBorder(),
+          suffixIcon: Icon(Icons.calendar_today),
         ),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(
-                _selectedDate == null
-                    ? 'Seleccionar fecha'
-                    : _filterType == 'Día'
-                        ? DateFormat('dd MMMM yyyy', 'es')
-                            .format(_selectedDate!)
-                        : _filterType == 'Semana'
-                            ? 'Semana del ${DateFormat('dd MMMM yyyy', 'es').format(_selectedDate!.subtract(Duration(days: _selectedDate!.weekday - 1)))}'
-                            : DateFormat('MMMM yyyy', 'es')
-                                .format(_selectedDate!),
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w500,
-                  color: _primaryColor,
-                ),
-              ),
-            ),
-            if (_selectedDate != null)
-              IconButton(
-                icon: const Icon(Icons.clear, color: Colors.redAccent),
-                onPressed: _clearFilters,
-                tooltip: 'Limpiar filtros',
-              ),
-          ],
-        ),
+        child: Text(_selectedDate == null
+            ? 'Todas las fechas'
+            : DateFormat('dd/MM/yyyy').format(_selectedDate!)),
       ),
     );
   }
 
-  Widget _buildMetricCard(
-      String title, String value, IconData icon, Color color) {
-    return Card(
-      elevation: 2,
-      color: _cardColor,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-      child: ListTile(
-        leading: Icon(icon, color: color, size: 24),
-        title: Text(
-          title,
-          style: TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.bold,
-            color: color,
-          ),
-        ),
-        subtitle: Text(
-          value,
-          style: const TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
+  Widget _buildSedeDropdown(CanchaProvider canchaProvider) {
+    return DropdownButtonFormField<String>(
+      value: _selectedSede,
+      decoration: const InputDecoration(
+        labelText: 'Sede',
+        border: OutlineInputBorder(),
+      ),
+      items: [
+        const DropdownMenuItem(value: null, child: Text('Todas las sedes')),
+        ...canchaProvider.canchas
+            .map((c) => c.sede)
+            .toSet()
+            .map((sede) => DropdownMenuItem(value: sede, child: Text(sede)))
+      ],
+      onChanged: (value) {
+        setState(() {
+          _selectedSede = value;
+          _selectedCanchaId = null;
+        });
+        _applyFilters();
+      },
+    );
+  }
+
+  Widget _buildCanchaDropdown(List<Cancha> canchas) {
+    return DropdownButtonFormField<String>(
+      value: _selectedCanchaId,
+      decoration: const InputDecoration(
+        labelText: 'Cancha',
+        border: OutlineInputBorder(),
+      ),
+      items: [
+        const DropdownMenuItem(value: null, child: Text('Todas las canchas')),
+        ...canchas.map((cancha) =>
+            DropdownMenuItem(value: cancha.id, child: Text(cancha.nombre)))
+      ],
+      onChanged: (value) {
+        setState(() => _selectedCanchaId = value);
+        _applyFilters();
+      },
+    );
+  }
+
+  Widget _buildStatsColumn(Map<String, dynamic> stats, int column) {
+    final items = [
+      ['Total Reservas', '${stats['totalReservas']}'],
+      ['Total Canchas', '${stats['totalCanchas']}'],
+      ['Total Sedes', '${stats['totalSedes']}'],
+      ['Cancha Popular', stats['canchaMasPedida']],
+      ['Sede Popular', stats['sedeMasPedida']],
+      ['Hora Popular', stats['horaMasPedida']],
+    ];
+
+    if (column == -1) {
+      return Column(
+        children:
+            items.map((item) => _buildStatItem(item[0], item[1])).toList(),
+      );
+    } else {
+      final start = column * 3;
+      final end = (start + 3).clamp(0, items.length);
+      return Column(
+        children: items
+            .sublist(start, end)
+            .map((item) => _buildStatItem(item[0], item[1]))
+            .toList(),
+      );
+    }
+  }
+
+  Widget _buildStatItem(String title, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(title, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+          Text(value,
+              style:
+                  const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+        ],
       ),
     );
   }
 
-  Widget _buildChartSection({required String title, required Widget chart}) {
+  Widget _buildChart(String title, Widget chart) {
     return Card(
-      elevation: 2,
-      color: _cardColor,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      margin: const EdgeInsets.only(bottom: 16),
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              title,
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: _primaryColor,
-              ),
-            ),
+            Text(title,
+                style:
+                    const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
             const SizedBox(height: 16),
-            SizedBox(
-              height: 300,
-              child: chart,
-            ),
+            SizedBox(height: 250, child: chart),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildSedeChart() {
+    return BarChart(
+      BarChartData(
+        barGroups: _getSedeReservasData(),
+        titlesData: FlTitlesData(
+          bottomTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              getTitlesWidget: (value, meta) {
+                final sedes =
+                    _filteredReservas.map((r) => r.sede).toSet().toList();
+                return value.toInt() >= 0 && value.toInt() < sedes.length
+                    ? Text(sedes[value.toInt()],
+                        style: const TextStyle(fontSize: 10))
+                    : const Text('');
+              },
+            ),
+          ),
+          leftTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              getTitlesWidget: (value, meta) => Text('${value.toInt()}'),
+            ),
+          ),
+          topTitles:
+              const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          rightTitles:
+              const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCanchaChart() {
+    return BarChart(
+      BarChartData(
+        barGroups: _getCanchaReservasData(),
+        titlesData: FlTitlesData(
+          bottomTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              getTitlesWidget: (value, meta) {
+                final canchas = _filteredReservas
+                    .map((r) => r.cancha.nombre)
+                    .toSet()
+                    .toList();
+                return value.toInt() >= 0 && value.toInt() < canchas.length
+                    ? Text(canchas[value.toInt()],
+                        style: const TextStyle(fontSize: 10))
+                    : const Text('');
+              },
+            ),
+          ),
+          leftTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              getTitlesWidget: (value, meta) => Text('${value.toInt()}'),
+            ),
+          ),
+          topTitles:
+              const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          rightTitles:
+              const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHorarioChart() {
+    return BarChart(
+      BarChartData(
+        barGroups: _getHorarioReservasData(),
+        titlesData: FlTitlesData(
+          bottomTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              getTitlesWidget: (value, meta) {
+                final horas = _filteredReservas
+                    .map((r) => r.horario.horaFormateada)
+                    .toSet()
+                    .toList();
+                return value.toInt() >= 0 && value.toInt() < horas.length
+                    ? Text(horas[value.toInt()],
+                        style: const TextStyle(fontSize: 10))
+                    : const Text('');
+              },
+            ),
+          ),
+          leftTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              getTitlesWidget: (value, meta) => Text('${value.toInt()}'),
+            ),
+          ),
+          topTitles:
+              const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          rightTitles:
+              const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTemporalChart() {
+    final temporalData = _getReservasTemporalesData();
+    final spots = temporalData['spots'] as List<FlSpot>;
+    final labels = temporalData['labels'] as List<String>;
+
+    if (spots.isEmpty) {
+      return const Center(
+        child:
+            Text('No hay datos suficientes para mostrar la gráfica temporal'),
+      );
+    }
+
+    return LineChart(
+      LineChartData(
+        lineBarsData: [
+          LineChartBarData(
+            spots: spots,
+            isCurved: true,
+            color: Colors.blue,
+            barWidth: 3,
+            isStrokeCapRound: true,
+            dotData: FlDotData(
+              show: true,
+              getDotPainter: (spot, percent, barData, index) =>
+                  FlDotCirclePainter(
+                radius: 4,
+                color: Colors.blue,
+                strokeWidth: 2,
+                strokeColor: Colors.white,
+              ),
+            ),
+            belowBarData: BarAreaData(
+              show: true,
+              color: Colors.blue.withOpacity(0.1),
+            ),
+          ),
+        ],
+        titlesData: FlTitlesData(
+          bottomTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              reservedSize: 40,
+              interval:
+                  spots.length > 6 ? (spots.length / 5).ceil().toDouble() : 1,
+              getTitlesWidget: (value, meta) {
+                final index = value.toInt();
+                if (index >= 0 && index < labels.length) {
+                  return Padding(
+                    padding: const EdgeInsets.only(top: 8.0),
+                    child: Text(
+                      labels[index],
+                      style: const TextStyle(fontSize: 10),
+                      textAlign: TextAlign.center,
+                    ),
+                  );
+                }
+                return const Text('');
+              },
+            ),
+          ),
+          leftTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              reservedSize: 40,
+              getTitlesWidget: (value, meta) {
+                return Text(
+                  '${value.toInt()}',
+                  style: const TextStyle(fontSize: 12),
+                );
+              },
+            ),
+          ),
+          topTitles:
+              const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          rightTitles:
+              const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+        ),
+        gridData: FlGridData(
+          show: true,
+          drawVerticalLine: false,
+          horizontalInterval: spots.isNotEmpty
+              ? (spots.map((s) => s.y).reduce((a, b) => a > b ? a : b) / 5)
+                  .ceilToDouble()
+              : 1,
+          getDrawingHorizontalLine: (value) {
+            return FlLine(
+              color: Colors.grey.withOpacity(0.3),
+              strokeWidth: 1,
+            );
+          },
+        ),
+        borderData: FlBorderData(
+          show: true,
+          border: Border.all(
+            color: Colors.grey.withOpacity(0.3),
+            width: 1,
+          ),
+        ),
+        minX: 0,
+        maxX: spots.isNotEmpty ? (spots.length - 1).toDouble() : 0,
+        minY: 0,
+        maxY: spots.isNotEmpty
+            ? (spots.map((s) => s.y).reduce((a, b) => a > b ? a : b) * 1.1)
+            : 10,
       ),
     );
   }

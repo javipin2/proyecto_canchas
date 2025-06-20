@@ -82,6 +82,8 @@ class AdminDashboardScreenState extends State<AdminDashboardScreen>
         ),
         backgroundColor: _backgroundColor,
         elevation: 0,
+        // Eliminamos el botón de retroceso automático
+        automaticallyImplyLeading: false,
         actions: [
           Tooltip(
             message: 'Cerrar sesión',
@@ -92,10 +94,11 @@ class AdminDashboardScreenState extends State<AdminDashboardScreen>
           ),
         ],
       ),
+      // Solo mostramos el drawer en móvil/tablet
       drawer: isDesktop ? null : _buildDrawer(context, user),
       body: Row(
         children: [
-          if (isDesktop) _buildNavigationRail(context, user),
+          // No mostramos NavigationRail en desktop para este dashboard
           Expanded(
             child: Padding(
               padding: const EdgeInsets.all(16.0),
@@ -112,15 +115,7 @@ class AdminDashboardScreenState extends State<AdminDashboardScreen>
                     mainAxisSpacing: 16,
                     childAspectRatio: 1.2,
                     children: [
-                      _buildAdminCard(
-                        icon: Icons.home,
-                        title: 'Inicio',
-                        description:
-                            'Vista general del panel de administración.',
-                        color: _secondaryColor,
-                        context: context,
-                        screen: const AdminDashboardScreen(),
-                      ),
+                      // Eliminamos la card de "Inicio"
                       _buildAdminCard(
                         icon: Icons.people,
                         title: 'Clientes',
@@ -140,8 +135,8 @@ class AdminDashboardScreenState extends State<AdminDashboardScreen>
                       ),
                       _buildAdminCard(
                         icon: Icons.bar_chart,
-                        title: 'raficas',
-                        description: 'conteo de tu neocio.',
+                        title: 'Gráficas',
+                        description: 'Análisis y conteo de tu negocio.',
                         color: Colors.red,
                         context: context,
                         screen: const GraficasScreen(),
@@ -209,10 +204,11 @@ class AdminDashboardScreenState extends State<AdminDashboardScreen>
             ),
           ),
           _buildDrawerItem(
-            icon: Icons.home,
-            title: 'Inicio',
+            icon: Icons.dashboard,
+            title: 'Dashboard',
             onTap: () {
               Navigator.pop(context);
+              // Ya estamos en el dashboard, no necesitamos navegar
             },
           ),
           _buildDrawerItem(
@@ -238,8 +234,8 @@ class AdminDashboardScreenState extends State<AdminDashboardScreen>
             },
           ),
           _buildDrawerItem(
-            icon: Icons.notifications,
-            title: 'Notificaciones',
+            icon: Icons.bar_chart,
+            title: 'Gráficas',
             onTap: () {
               Navigator.pop(context);
               Navigator.push(
@@ -272,99 +268,17 @@ class AdminDashboardScreenState extends State<AdminDashboardScreen>
               );
             },
           ),
+          const Divider(),
+          _buildDrawerItem(
+            icon: Icons.exit_to_app,
+            title: 'Cerrar Sesión',
+            onTap: () {
+              Navigator.pop(context);
+              _logout(context);
+            },
+          ),
         ],
       ),
-    );
-  }
-
-  Widget _buildNavigationRail(BuildContext context, User? user) {
-    return NavigationRail(
-      backgroundColor: _backgroundColor,
-      selectedIndex: 0,
-      onDestinationSelected: (index) {
-        Navigator.pop(context);
-        switch (index) {
-          case 0:
-            break;
-          case 1:
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => const ClientesScreen()),
-            );
-            break;
-          case 2:
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => const CanchasScreen()),
-            );
-            break;
-          case 3:
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => const GraficasScreen()),
-            );
-            break;
-          case 4:
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                  builder: (context) => const AdminReservasScreen()),
-            );
-            break;
-          case 5:
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                  builder: (context) => const AdminRegistroReservasScreen()),
-            );
-            break;
-        }
-      },
-      labelType: NavigationRailLabelType.all,
-      destinations: [
-        NavigationRailDestination(
-          icon: Icon(Icons.home, color: _secondaryColor),
-          label: Text(
-            'Inicio',
-            style: GoogleFonts.montserrat(fontWeight: FontWeight.w500),
-          ),
-        ),
-        NavigationRailDestination(
-          icon: Icon(Icons.people, color: _secondaryColor),
-          label: Text(
-            'Clientes',
-            style: GoogleFonts.montserrat(fontWeight: FontWeight.w500),
-          ),
-        ),
-        NavigationRailDestination(
-          icon: Icon(Icons.business, color: _secondaryColor),
-          label: Text(
-            'Sedes y Canchas',
-            style: GoogleFonts.montserrat(fontWeight: FontWeight.w500),
-          ),
-        ),
-        NavigationRailDestination(
-          icon: Icon(Icons.notifications, color: _secondaryColor),
-          label: Text(
-            'Notificaciones',
-            style: GoogleFonts.montserrat(fontWeight: FontWeight.w500),
-          ),
-        ),
-        NavigationRailDestination(
-          icon: Icon(Icons.schedule, color: _secondaryColor),
-          label: Text(
-            'Reservas',
-            style: GoogleFonts.montserrat(fontWeight: FontWeight.w500),
-          ),
-        ),
-        NavigationRailDestination(
-          icon: Icon(Icons.book, color: _secondaryColor),
-          label: Text(
-            'Registro de Reservas',
-            style: GoogleFonts.montserrat(fontWeight: FontWeight.w500),
-          ),
-        ),
-      ],
     );
   }
 

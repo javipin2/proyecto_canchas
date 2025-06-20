@@ -219,7 +219,6 @@ class CanchasScreenState extends State<CanchasScreen> {
                             .collection('canchas')
                             .snapshots(),
                         builder: (context, snapshot) {
-                          // Depuración
                           print(
                               'Estado de conexión (canchas): ${snapshot.connectionState}');
                           print('Tiene datos: ${snapshot.hasData}');
@@ -271,7 +270,6 @@ class CanchasScreenState extends State<CanchasScreen> {
                               ),
                             );
                           }
-                          // Extraer valores únicos del campo 'sede' desde 'canchas'
                           final canchaDocs = snapshot.data!.docs;
                           final sedesSet = <String>{};
                           for (var doc in canchaDocs) {
@@ -437,7 +435,7 @@ class CanchasScreenState extends State<CanchasScreen> {
 
   Widget _buildDataTable(List<QueryDocumentSnapshot> canchaDocs,
       double maxWidth, double textScale) {
-    final columnWidth = maxWidth / 6.5;
+    final columnWidth = maxWidth / 5.0; // Ajustado para 5 columnas
     final minColumnWidth = 100.0;
     final maxColumnWidth = columnWidth.clamp(minColumnWidth, 200.0);
 
@@ -449,7 +447,7 @@ class CanchasScreenState extends State<CanchasScreen> {
       ),
       color: _cardColor,
       child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
+        scrollDirection: Axis.vertical,
         child: ConstrainedBox(
           constraints: BoxConstraints(minWidth: maxWidth),
           child: DataTable(
@@ -468,12 +466,6 @@ class CanchasScreenState extends State<CanchasScreen> {
               fontSize: 13 * textScale,
             ),
             columns: [
-              DataColumn(
-                label: SizedBox(
-                  width: maxColumnWidth * 0.8,
-                  child: Text('ID', overflow: TextOverflow.ellipsis),
-                ),
-              ),
               DataColumn(
                 label: SizedBox(
                   width: maxColumnWidth,
@@ -516,15 +508,6 @@ class CanchasScreenState extends State<CanchasScreen> {
                   },
                 ),
                 cells: [
-                  DataCell(
-                    SizedBox(
-                      width: maxColumnWidth * 0.8,
-                      child: Text(
-                        doc.id,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ),
                   DataCell(
                     SizedBox(
                       width: maxColumnWidth,
@@ -607,8 +590,7 @@ class CanchasScreenState extends State<CanchasScreen> {
                                 MaterialPageRoute(
                                   builder: (context) => EditarCanchaScreen(
                                     canchaId: doc.id,
-                                    cancha: Cancha.fromFirestore(
-                                        doc), // Usar el modelo Cancha
+                                    cancha: Cancha.fromFirestore(doc),
                                   ),
                                 ),
                               );
@@ -710,8 +692,7 @@ class CanchasScreenState extends State<CanchasScreen> {
                       MaterialPageRoute(
                         builder: (context) => EditarCanchaScreen(
                           canchaId: doc.id,
-                          cancha: Cancha.fromFirestore(
-                              doc), // Usar el modelo Cancha
+                          cancha: Cancha.fromFirestore(doc),
                         ),
                       ),
                     );
