@@ -34,8 +34,7 @@ class GraficasScreenState extends State<GraficasScreen> {
     setState(() => _isLoading = true);
 
     try {
-      final canchaProvider =
-          Provider.of<CanchaProvider>(context, listen: false);
+      final canchaProvider = Provider.of<CanchaProvider>(context, listen: false);
       await canchaProvider.fetchAllCanchas();
       await canchaProvider.fetchHorasReservadas();
 
@@ -69,30 +68,19 @@ class GraficasScreenState extends State<GraficasScreen> {
   void _applyFilters() {
     List<Reserva> filtered = List.from(_reservas);
 
+    // Aplicar filtro de sede
     if (_selectedSede?.isNotEmpty == true) {
-      filtered =
-          filtered.where((reserva) => reserva.sede == _selectedSede).toList();
+      filtered = filtered.where((reserva) => reserva.sede == _selectedSede).toList();
     }
 
+    // Aplicar filtro de cancha
     if (_selectedCanchaId?.isNotEmpty == true) {
-      filtered = filtered
-          .where((reserva) => reserva.cancha.id == _selectedCanchaId)
-          .toList();
+      filtered = filtered.where((reserva) => reserva.cancha.id == _selectedCanchaId).toList();
     }
 
+    // Aplicar filtro de fecha si está seleccionada
     if (_selectedDate != null) {
-      filtered = filtered.where((reserva) {
-        switch (_filterType) {
-          case 'Día':
-            return _isSameDay(reserva.fecha, _selectedDate!);
-          case 'Semana':
-            return _isInSameWeek(reserva.fecha, _selectedDate!);
-          case 'Mes':
-            return _isSameMonth(reserva.fecha, _selectedDate!);
-          default:
-            return true;
-        }
-      }).toList();
+      filtered = filtered.where((reserva) => _isSameDay(reserva.fecha, _selectedDate!)).toList();
     }
 
     setState(() => _filteredReservas = filtered);
@@ -139,43 +127,53 @@ class GraficasScreenState extends State<GraficasScreen> {
   }
 
   Map<String, dynamic> _getStats() {
-    final totalReservas = _filteredReservas.length;
-    final totalCanchas =
-        Provider.of<CanchaProvider>(context, listen: false).canchas.length;
+    final currentDate = DateTime.now();
+    final totalCanchas = Provider.of<CanchaProvider>(context, listen: false).canchas.length;
     final totalSedes = Provider.of<CanchaProvider>(context, listen: false)
         .canchas
         .map((c) => c.sede)
         .toSet()
         .length;
 
+    // Filtrar reservas según el período actual
+    final periodFilteredReservas = _filteredReservas.where((reserva) {
+      switch (_filterType) {
+        case 'Día':
+          return _isSameDay(reserva.fecha, currentDate);
+        case 'Semana':
+          return _isInSameWeek(reserva.fecha, currentDate);
+        case 'Mes':
+          return _isSameMonth(reserva.fecha, currentDate);
+        default:
+          return true;
+      }
+    }).toList();
+
+    final totalReservas = periodFilteredReservas.length;
+
     String canchaMasPedida = 'Sin datos';
     String sedeMasPedida = 'Sin datos';
     String horaMasPedida = 'Sin datos';
 
-    if (_filteredReservas.isNotEmpty) {
+    if (periodFilteredReservas.isNotEmpty) {
       final canchaCount = <String, int>{};
       final sedeCount = <String, int>{};
       final horaCount = <String, int>{};
 
-      for (var reserva in _filteredReservas) {
-        canchaCount[reserva.cancha.nombre] =
-            (canchaCount[reserva.cancha.nombre] ?? 0) + 1;
+      for (var reserva in periodFilteredReservas) {
+        canchaCount[reserva.cancha.nombre] = (canchaCount[reserva.cancha.nombre] ?? 0) + 1;
         sedeCount[reserva.sede] = (sedeCount[reserva.sede] ?? 0) + 1;
-        horaCount[reserva.horario.horaFormateada] =
-            (horaCount[reserva.horario.horaFormateada] ?? 0) + 1;
+        horaCount[reserva.horario.horaFormateada] = (horaCount[reserva.horario.horaFormateada] ?? 0) + 1;
       }
 
       if (canchaCount.isNotEmpty) {
-        canchaMasPedida =
-            canchaCount.entries.reduce((a, b) => a.value > b.value ? a : b).key;
+        canchaMasPedida = canchaCount.entries.reduce((a, b) => a.value > b.value ? a : b).key;
       }
       if (sedeCount.isNotEmpty) {
-        sedeMasPedida =
-            sedeCount.entries.reduce((a, b) => a.value > b.value ? a : b).key;
+        sedeMasPedida = sedeCount.entries.reduce((a, b) => a.value > b.value ? a : b).key;
       }
       if (horaCount.isNotEmpty) {
-        horaMasPedida =
-            horaCount.entries.reduce((a, b) => a.value > b.value ? a : b).key;
+        horaMasPedida = horaCount.entries.reduce((a, b) => a.value > b.value ? a : b).key;
       }
     }
 
@@ -192,8 +190,22 @@ class GraficasScreenState extends State<GraficasScreen> {
   List<BarChartGroupData> _getSedeReservasData() {
     if (_filteredReservas.isEmpty) return [];
 
+    final currentDate = DateTime.now();
+    final periodFilteredReservas = _filteredReservas.where((reserva) {
+      switch (_filterType) {
+        case 'Día':
+          return _isSameDay(reserva.fecha, currentDate);
+        case 'Semana':
+          return _isInSameWeek(reserva.fecha, currentDate);
+        case 'Mes':
+          return _isSameMonth(reserva.fecha, currentDate);
+        default:
+          return true;
+      }
+    }).toList();
+
     final sedeCount = <String, int>{};
-    for (var reserva in _filteredReservas) {
+    for (var reserva in periodFilteredReservas) {
       sedeCount[reserva.sede] = (sedeCount[reserva.sede] ?? 0) + 1;
     }
 
@@ -215,10 +227,23 @@ class GraficasScreenState extends State<GraficasScreen> {
   List<BarChartGroupData> _getCanchaReservasData() {
     if (_filteredReservas.isEmpty) return [];
 
+    final currentDate = DateTime.now();
+    final periodFilteredReservas = _filteredReservas.where((reserva) {
+      switch (_filterType) {
+        case 'Día':
+          return _isSameDay(reserva.fecha, currentDate);
+        case 'Semana':
+          return _isInSameWeek(reserva.fecha, currentDate);
+        case 'Mes':
+          return _isSameMonth(reserva.fecha, currentDate);
+        default:
+          return true;
+      }
+    }).toList();
+
     final canchaCount = <String, int>{};
-    for (var reserva in _filteredReservas) {
-      canchaCount[reserva.cancha.nombre] =
-          (canchaCount[reserva.cancha.nombre] ?? 0) + 1;
+    for (var reserva in periodFilteredReservas) {
+      canchaCount[reserva.cancha.nombre] = (canchaCount[reserva.cancha.nombre] ?? 0) + 1;
     }
 
     final canchas = canchaCount.keys.toList();
@@ -239,10 +264,23 @@ class GraficasScreenState extends State<GraficasScreen> {
   List<BarChartGroupData> _getHorarioReservasData() {
     if (_filteredReservas.isEmpty) return [];
 
+    final currentDate = DateTime.now();
+    final periodFilteredReservas = _filteredReservas.where((reserva) {
+      switch (_filterType) {
+        case 'Día':
+          return _isSameDay(reserva.fecha, currentDate);
+        case 'Semana':
+          return _isInSameWeek(reserva.fecha, currentDate);
+        case 'Mes':
+          return _isSameMonth(reserva.fecha, currentDate);
+        default:
+          return true;
+      }
+    }).toList();
+
     final horaCount = <String, int>{};
-    for (var reserva in _filteredReservas) {
-      horaCount[reserva.horario.horaFormateada] =
-          (horaCount[reserva.horario.horaFormateada] ?? 0) + 1;
+    for (var reserva in periodFilteredReservas) {
+      horaCount[reserva.horario.horaFormateada] = (horaCount[reserva.horario.horaFormateada] ?? 0) + 1;
     }
 
     final horas = horaCount.keys.toList();
@@ -264,24 +302,45 @@ class GraficasScreenState extends State<GraficasScreen> {
     if (_filteredReservas.isEmpty)
       return {'spots': <FlSpot>[], 'labels': <String>[]};
 
+    final currentDate = DateTime.now();
     final reservasData = <String, int>{};
 
-    // Agrupar las reservas según el tipo de filtro
+    // Determinar el rango histórico según el período
+    int historicalRange;
+    switch (_filterType) {
+      case 'Día':
+        historicalRange = 10; // Últimos 10 días
+        break;
+      case 'Semana':
+        historicalRange = 4; // Últimas 4 semanas
+        break;
+      case 'Mes':
+        historicalRange = 6; // Últimos 6 meses
+        break;
+      default:
+        historicalRange = 6;
+    }
+
     for (var reserva in _filteredReservas) {
       String key;
+      DateTime startDate;
       switch (_filterType) {
         case 'Día':
+          startDate = currentDate.subtract(Duration(days: historicalRange - 1));
+          if (reserva.fecha.isBefore(startDate) || reserva.fecha.isAfter(currentDate)) continue;
           key = DateFormat('dd/MM/yyyy').format(reserva.fecha);
           break;
         case 'Semana':
-          final startOfWeek =
-              reserva.fecha.subtract(Duration(days: reserva.fecha.weekday - 1));
+          startDate = currentDate.subtract(Duration(days: (historicalRange - 1) * 7));
+          final startOfWeek = reserva.fecha.subtract(Duration(days: reserva.fecha.weekday - 1));
+          if (startOfWeek.isBefore(startDate) || startOfWeek.isAfter(currentDate)) continue;
           final endOfWeek = startOfWeek.add(const Duration(days: 6));
-          key =
-              '${DateFormat('dd/MM').format(startOfWeek)}-${DateFormat('dd/MM').format(endOfWeek)}';
+          key = '${DateFormat('dd/MM').format(startOfWeek)}-${DateFormat('dd/MM').format(endOfWeek)}';
           break;
         case 'Mes':
         default:
+          startDate = DateTime(currentDate.year, currentDate.month - historicalRange + 1, 1);
+          if (reserva.fecha.isBefore(startDate) || reserva.fecha.isAfter(currentDate)) continue;
           key = DateFormat('MMM yyyy', 'es').format(reserva.fecha);
           break;
       }
@@ -307,8 +366,7 @@ class GraficasScreenState extends State<GraficasScreen> {
   Widget build(BuildContext context) {
     final canchaProvider = Provider.of<CanchaProvider>(context);
     final canchas = canchaProvider.canchas
-        .where(
-            (cancha) => _selectedSede == null || cancha.sede == _selectedSede)
+        .where((cancha) => _selectedSede == null || cancha.sede == _selectedSede)
         .toList();
     final stats = _getStats();
     final isWide = MediaQuery.of(context).size.width > 800;
@@ -336,8 +394,7 @@ class GraficasScreenState extends State<GraficasScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           const Text('Filtros',
-                              style: TextStyle(
-                                  fontSize: 18, fontWeight: FontWeight.bold)),
+                              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                           const SizedBox(height: 16),
                           isWide
                               ? Row(
@@ -346,12 +403,9 @@ class GraficasScreenState extends State<GraficasScreen> {
                                     const SizedBox(width: 16),
                                     Expanded(child: _buildDateSelector()),
                                     const SizedBox(width: 16),
-                                    Expanded(
-                                        child:
-                                            _buildSedeDropdown(canchaProvider)),
+                                    Expanded(child: _buildSedeDropdown(canchaProvider)),
                                     const SizedBox(width: 16),
-                                    Expanded(
-                                        child: _buildCanchaDropdown(canchas)),
+                                    Expanded(child: _buildCanchaDropdown(canchas)),
                                   ],
                                 )
                               : Column(
@@ -382,16 +436,13 @@ class GraficasScreenState extends State<GraficasScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text('Estadísticas - Período: $_filterType',
-                              style: const TextStyle(
-                                  fontSize: 18, fontWeight: FontWeight.bold)),
+                              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                           const SizedBox(height: 16),
                           isWide
                               ? Row(
                                   children: [
-                                    Expanded(
-                                        child: _buildStatsColumn(stats, 0)),
-                                    Expanded(
-                                        child: _buildStatsColumn(stats, 1)),
+                                    Expanded(child: _buildStatsColumn(stats, 0)),
+                                    Expanded(child: _buildStatsColumn(stats, 1)),
                                   ],
                                 )
                               : _buildStatsColumn(stats, -1),
@@ -405,38 +456,31 @@ class GraficasScreenState extends State<GraficasScreen> {
                         ? Row(
                             children: [
                               Expanded(
-                                  child: _buildChart(
-                                      'Reservas por Sede', _buildSedeChart())),
+                                  child: _buildChart('Reservas por Sede', _buildSedeChart())),
                               const SizedBox(width: 16),
                               Expanded(
-                                  child: _buildChart('Reservas por Cancha',
-                                      _buildCanchaChart())),
+                                  child: _buildChart('Reservas por Cancha', _buildCanchaChart())),
                             ],
                           )
                         : Column(
                             children: [
-                              _buildChart(
-                                  'Reservas por Sede', _buildSedeChart()),
+                              _buildChart('Reservas por Sede', _buildSedeChart()),
                               const SizedBox(height: 16),
-                              _buildChart(
-                                  'Reservas por Cancha', _buildCanchaChart()),
+                              _buildChart('Reservas por Cancha', _buildCanchaChart()),
                             ],
                           ),
                     const SizedBox(height: 16),
                     _buildChart('Horarios Más Pedidos', _buildHorarioChart()),
                     const SizedBox(height: 16),
-                    _buildChart('Reservas en el Tiempo ($_filterType)',
-                        _buildTemporalChart()),
+                    _buildChart('Reservas en el Tiempo ($_filterType)', _buildTemporalChart()),
                   ] else
                     const Center(
                       child: Column(
                         children: [
-                          Icon(Icons.info_outline,
-                              size: 64, color: Colors.grey),
+                          Icon(Icons.info_outline, size: 64, color: Colors.grey),
                           SizedBox(height: 16),
                           Text('No hay datos para mostrar',
-                              style:
-                                  TextStyle(fontSize: 18, color: Colors.grey)),
+                              style: TextStyle(fontSize: 18, color: Colors.grey)),
                         ],
                       ),
                     ),
@@ -458,7 +502,10 @@ class GraficasScreenState extends State<GraficasScreen> {
           .toList(),
       onChanged: (value) {
         if (value != null && value != _filterType) {
-          setState(() => _filterType = value);
+          setState(() {
+            _filterType = value;
+            _selectedDate = null; // Limpiar fecha al cambiar período
+          });
           _applyFilters();
         }
       },
@@ -536,8 +583,7 @@ class GraficasScreenState extends State<GraficasScreen> {
 
     if (column == -1) {
       return Column(
-        children:
-            items.map((item) => _buildStatItem(item[0], item[1])).toList(),
+        children: items.map((item) => _buildStatItem(item[0], item[1])).toList(),
       );
     } else {
       final start = column * 3;
@@ -558,9 +604,7 @@ class GraficasScreenState extends State<GraficasScreen> {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(title, style: const TextStyle(fontSize: 12, color: Colors.grey)),
-          Text(value,
-              style:
-                  const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+          Text(value, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
         ],
       ),
     );
@@ -573,9 +617,7 @@ class GraficasScreenState extends State<GraficasScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(title,
-                style:
-                    const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
             const SizedBox(height: 16),
             SizedBox(height: 250, child: chart),
           ],
@@ -593,11 +635,9 @@ class GraficasScreenState extends State<GraficasScreen> {
             sideTitles: SideTitles(
               showTitles: true,
               getTitlesWidget: (value, meta) {
-                final sedes =
-                    _filteredReservas.map((r) => r.sede).toSet().toList();
+                final sedes = _filteredReservas.map((r) => r.sede).toSet().toList();
                 return value.toInt() >= 0 && value.toInt() < sedes.length
-                    ? Text(sedes[value.toInt()],
-                        style: const TextStyle(fontSize: 10))
+                    ? Text(sedes[value.toInt()], style: const TextStyle(fontSize: 10))
                     : const Text('');
               },
             ),
@@ -608,10 +648,8 @@ class GraficasScreenState extends State<GraficasScreen> {
               getTitlesWidget: (value, meta) => Text('${value.toInt()}'),
             ),
           ),
-          topTitles:
-              const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          rightTitles:
-              const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
         ),
       ),
     );
@@ -626,13 +664,9 @@ class GraficasScreenState extends State<GraficasScreen> {
             sideTitles: SideTitles(
               showTitles: true,
               getTitlesWidget: (value, meta) {
-                final canchas = _filteredReservas
-                    .map((r) => r.cancha.nombre)
-                    .toSet()
-                    .toList();
+                final canchas = _filteredReservas.map((r) => r.cancha.nombre).toSet().toList();
                 return value.toInt() >= 0 && value.toInt() < canchas.length
-                    ? Text(canchas[value.toInt()],
-                        style: const TextStyle(fontSize: 10))
+                    ? Text(canchas[value.toInt()], style: const TextStyle(fontSize: 10))
                     : const Text('');
               },
             ),
@@ -643,10 +677,8 @@ class GraficasScreenState extends State<GraficasScreen> {
               getTitlesWidget: (value, meta) => Text('${value.toInt()}'),
             ),
           ),
-          topTitles:
-              const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          rightTitles:
-              const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
         ),
       ),
     );
@@ -661,13 +693,9 @@ class GraficasScreenState extends State<GraficasScreen> {
             sideTitles: SideTitles(
               showTitles: true,
               getTitlesWidget: (value, meta) {
-                final horas = _filteredReservas
-                    .map((r) => r.horario.horaFormateada)
-                    .toSet()
-                    .toList();
+                final horas = _filteredReservas.map((r) => r.horario.horaFormateada).toSet().toList();
                 return value.toInt() >= 0 && value.toInt() < horas.length
-                    ? Text(horas[value.toInt()],
-                        style: const TextStyle(fontSize: 10))
+                    ? Text(horas[value.toInt()], style: const TextStyle(fontSize: 10))
                     : const Text('');
               },
             ),
@@ -678,10 +706,8 @@ class GraficasScreenState extends State<GraficasScreen> {
               getTitlesWidget: (value, meta) => Text('${value.toInt()}'),
             ),
           ),
-          topTitles:
-              const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          rightTitles:
-              const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
         ),
       ),
     );
@@ -694,8 +720,7 @@ class GraficasScreenState extends State<GraficasScreen> {
 
     if (spots.isEmpty) {
       return const Center(
-        child:
-            Text('No hay datos suficientes para mostrar la gráfica temporal'),
+        child: Text('No hay datos suficientes para mostrar la gráfica temporal'),
       );
     }
 
@@ -706,21 +731,21 @@ class GraficasScreenState extends State<GraficasScreen> {
             spots: spots,
             isCurved: true,
             color: Colors.blue,
-            barWidth: 3,
+            barWidth: 4, // Aumentado para mayor visibilidad
             isStrokeCapRound: true,
             dotData: FlDotData(
               show: true,
               getDotPainter: (spot, percent, barData, index) =>
                   FlDotCirclePainter(
-                radius: 4,
-                color: Colors.blue,
-                strokeWidth: 2,
-                strokeColor: Colors.white,
-              ),
+                    radius: 5, // Aumentado para destacar puntos
+                    color: Colors.blue,
+                    strokeWidth: 2,
+                    strokeColor: Colors.white,
+                  ),
             ),
             belowBarData: BarAreaData(
               show: true,
-              color: Colors.blue.withOpacity(0.1),
+              color: Colors.blue.withOpacity(0.2), // Área más clara para contraste
             ),
           ),
         ],
@@ -728,9 +753,8 @@ class GraficasScreenState extends State<GraficasScreen> {
           bottomTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
-              reservedSize: 40,
-              interval:
-                  spots.length > 6 ? (spots.length / 5).ceil().toDouble() : 1,
+              reservedSize: 50,
+              interval: spots.length > 10 ? (spots.length / 5).ceil().toDouble() : 1,
               getTitlesWidget: (value, meta) {
                 final index = value.toInt();
                 if (index >= 0 && index < labels.length) {
@@ -740,6 +764,7 @@ class GraficasScreenState extends State<GraficasScreen> {
                       labels[index],
                       style: const TextStyle(fontSize: 10),
                       textAlign: TextAlign.center,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   );
                 }
@@ -759,10 +784,8 @@ class GraficasScreenState extends State<GraficasScreen> {
               },
             ),
           ),
-          topTitles:
-              const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          rightTitles:
-              const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
         ),
         gridData: FlGridData(
           show: true,
@@ -789,7 +812,7 @@ class GraficasScreenState extends State<GraficasScreen> {
         maxX: spots.isNotEmpty ? (spots.length - 1).toDouble() : 0,
         minY: 0,
         maxY: spots.isNotEmpty
-            ? (spots.map((s) => s.y).reduce((a, b) => a > b ? a : b) * 1.1)
+            ? (spots.map((s) => s.y).reduce((a, b) => a > b ? a : b) * 1.2) // Aumentado para más espacio
             : 10,
       ),
     );
